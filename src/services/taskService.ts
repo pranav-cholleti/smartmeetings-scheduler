@@ -1,66 +1,90 @@
 
-import api from './api';
-import { 
-  Task, 
-  TasksResponse, 
-  CreateTaskData, 
-  UpdateTaskData 
-} from '../types';
+import api from "./api";
+import { Task, TasksResponse } from "../types";
 
 export const taskService = {
-  // Create a new task
-  async createTask(data: CreateTaskData): Promise<Task> {
-    const response = await api.post('/tasks', data);
-    return response.data.data;
-  },
-
-  // Get tasks assigned to the current user
+  // Get tasks assigned to current user
   async getAssignedTasks(
     page = 1, 
-    limit = 10, 
-    search?: string, 
-    sortBy: string = 'priority', 
-    sortOrder: string = 'asc', 
+    limit = 10,
+    search?: string,
+    sortBy = "priority",
+    sortOrder = "asc",
     filter?: string
   ): Promise<TasksResponse> {
-    const response = await api.get('/tasks/assigned', {
-      params: { page, limit, search, sortBy, sortOrder, filter }
-    });
+    const params = { page, limit, search, sortBy, sortOrder, filter };
+    const response = await api.get<{ success: boolean; data: TasksResponse }>(
+      "/tasks/assigned",
+      { params }
+    );
     return response.data.data;
   },
-
-  // Get tasks scheduled by the current user (as host)
+  
+  // Get tasks scheduled by current user as host
   async getScheduledTasks(
     page = 1, 
-    limit = 10, 
-    search?: string, 
-    sortBy: string = 'priority', 
-    sortOrder: string = 'asc', 
+    limit = 10,
+    search?: string,
+    sortBy = "priority",
+    sortOrder = "asc",
     filter?: string
   ): Promise<TasksResponse> {
-    const response = await api.get('/tasks/scheduled', {
-      params: { page, limit, search, sortBy, sortOrder, filter }
-    });
+    const params = { page, limit, search, sortBy, sortOrder, filter };
+    const response = await api.get<{ success: boolean; data: TasksResponse }>(
+      "/tasks/scheduled",
+      { params }
+    );
     return response.data.data;
   },
-
-  // Update a task
-  async updateTask(taskId: string, data: UpdateTaskData): Promise<Task> {
-    const response = await api.put(`/tasks/${taskId}`, data);
+  
+  // Create a new task
+  async createTask(data: {
+    meetingId: string;
+    taskName: string;
+    assignees: string[];
+    deadline: string;
+    priority: number;
+    additionalComments?: string;
+  }): Promise<Task> {
+    const response = await api.post<{ success: boolean; data: Task }>(
+      "/tasks",
+      data
+    );
     return response.data.data;
   },
-
+  
+  // Update an existing task
+  async updateTask(
+    taskId: string,
+    data: {
+      taskName?: string;
+      assignees?: string[];
+      deadline?: string;
+      priority?: number;
+      progress?: "Not Started" | "In Progress" | "Completed" | "Blocked";
+      additionalComments?: string;
+    }
+  ): Promise<Task> {
+    const response = await api.put<{ success: boolean; data: Task }>(
+      `/tasks/${taskId}`,
+      data
+    );
+    return response.data.data;
+  },
+  
+  // Update task progress (for assignees)
+  async updateTaskProgress(
+    taskId: string,
+    progress: "Not Started" | "In Progress" | "Completed" | "Blocked"
+  ): Promise<Task> {
+    return this.updateTask(taskId, { progress });
+  },
+  
   // Delete a task
-  async deleteTask(taskId: string): Promise<{taskId: string}> {
-    const response = await api.delete(`/tasks/${taskId}`);
-    return response.data.data;
-  },
-
-  // Get users in same organisation
-  async getOrganisationUsers(search?: string): Promise<{userId: string, name: string, email: string}[]> {
-    const response = await api.get('/users/organisation', {
-      params: { search }
-    });
+  async deleteTask(taskId: string): Promise<{ taskId: string }> {
+    const response = await api.delete<{ success: boolean; data: { taskId: string } }>(
+      `/tasks/${taskId}`
+    );
     return response.data.data;
   }
 };

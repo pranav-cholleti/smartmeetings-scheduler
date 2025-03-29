@@ -13,6 +13,7 @@ import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
 import DashboardPage from "./pages/DashboardPage";
 import MeetingsPage from "./pages/MeetingsPage";
+import MeetingDetailsPage from "./pages/MeetingDetailsPage";
 import CreateMeetingPage from "./pages/CreateMeetingPage";
 import TasksPage from "./pages/TasksPage";
 import NotFound from "./pages/NotFound";
@@ -48,6 +49,16 @@ const App = () => (
                 <ProtectedRoute>
                   <AppLayout>
                     <MeetingsPage />
+                  </AppLayout>
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/meetings/:meetingId" 
+              element={
+                <ProtectedRoute>
+                  <AppLayout>
+                    <MeetingDetailsPage />
                   </AppLayout>
                 </ProtectedRoute>
               } 

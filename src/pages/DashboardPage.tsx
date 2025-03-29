@@ -1,65 +1,30 @@
 
-import { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
-import { CalendarIcon, MoreHorizontal, PlusCircle, Users } from "lucide-react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { useState } from "react";
 import { useAuth } from "@/context/AuthContext";
-import { Badge } from "@/components/ui/badge";
-import { Spinner } from "@/components/ui/spinner";
-import { taskService } from "@/services/taskService";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Calendar, CheckCircle2, Clock, Plus, UserCheck } from "lucide-react";
+import { Link } from "react-router-dom";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useQuery } from "@tanstack/react-query";
 import { meetingService } from "@/services/meetingService";
-import { Task, Meeting } from "@/types";
+import { taskService } from "@/services/taskService";
 
 export default function DashboardPage() {
   const { user } = useAuth();
-  const [loading, setLoading] = useState({
-    tasks: true,
-    meetings: true,
+  const [showWelcomeCard, setShowWelcomeCard] = useState(true);
+
+  // Fetch recent meetings
+  const { data: recentMeetings, isLoading: loadingMeetings } = useQuery({
+    queryKey: ['meetings', 'recent'],
+    queryFn: () => meetingService.getMeetings(1, 3),
   });
-  const [recentTasks, setRecentTasks] = useState<Task[]>([]);
-  const [upcomingMeetings, setUpcomingMeetings] = useState<Meeting[]>([]);
 
-  useEffect(() => {
-    const fetchDashboardData = async () => {
-      try {
-        // Get high priority tasks
-        const tasksResponse = await taskService.getAssignedTasks(1, 5, undefined, 'priority', 'asc');
-        setRecentTasks(tasksResponse.tasks || []);
-      } catch (error) {
-        console.error("Error fetching tasks:", error);
-      } finally {
-        setLoading(prev => ({ ...prev, tasks: false }));
-      }
-      
-      try {
-        // Get upcoming meetings
-        const meetingsResponse = await meetingService.getMeetings(1, 5, undefined, 'dateTime', 'asc');
-        setUpcomingMeetings(meetingsResponse.meetings || []);
-      } catch (error) {
-        console.error("Error fetching meetings:", error);
-      } finally {
-        setLoading(prev => ({ ...prev, meetings: false }));
-      }
-    };
-
-    fetchDashboardData();
-  }, []);
-
-  const getTaskStatusBadge = (progress: string) => {
-    switch (progress) {
-      case "Not Started":
-        return <Badge variant="outline" className="bg-gray-200 text-gray-800">Not Started</Badge>;
-      case "In Progress":
-        return <Badge className="bg-blue-500">In Progress</Badge>;
-      case "Completed":
-        return <Badge className="bg-green-500">Completed</Badge>;
-      case "Blocked":
-        return <Badge variant="destructive">Blocked</Badge>;
-      default:
-        return <Badge variant="outline">{progress}</Badge>;
-    }
-  };
+  // Fetch assigned tasks
+  const { data: assignedTasks, isLoading: loadingTasks } = useQuery({
+    queryKey: ['tasks', 'assigned'],
+    queryFn: () => taskService.getAssignedTasks(1, 5),
+  });
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
@@ -67,209 +32,224 @@ export default function DashboardPage() {
       day: '2-digit',
       month: 'short',
       year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
     }).format(date);
   };
 
-  const isSameDay = (date1: Date, date2: Date) => {
-    return date1.getDate() === date2.getDate() &&
-      date1.getMonth() === date2.getMonth() &&
-      date1.getFullYear() === date2.getFullYear();
-  };
-  
-  const getRelativeTime = (dateString: string) => {
-    const date = new Date(dateString);
-    const today = new Date();
-  
-    if (isSameDay(date, today)) {
-      return 'Today, ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    } 
-    
-    const tomorrow = new Date(today);
-    tomorrow.setDate(today.getDate() + 1);
-    if (isSameDay(date, tomorrow)) {
-      return 'Tomorrow, ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const getTaskStatusColor = (progress: string) => {
+    switch (progress) {
+      case 'Not Started': return 'bg-gray-200';
+      case 'In Progress': return 'bg-blue-200';
+      case 'Completed': return 'bg-green-200';
+      case 'Blocked': return 'bg-red-200';
+      default: return 'bg-gray-200';
     }
-  
-    const yesterday = new Date(today);
-    yesterday.setDate(today.getDate() - 1);
-    if (isSameDay(date, yesterday)) {
-      return 'Yesterday, ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    }
-  
-    return formatDate(dateString);
   };
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold">Welcome, {user?.name}</h1>
-          <p className="text-muted-foreground mt-1">
-            Your meeting dashboard overview
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button asChild>
-            <Link to="/meetings/create">
-              <PlusCircle className="h-4 w-4 mr-2" />
-              New Meeting
-            </Link>
-          </Button>
-        </div>
+      <div>
+        <h1 className="text-3xl font-bold">Dashboard</h1>
+        <p className="text-muted-foreground">Welcome back, {user?.name}</p>
       </div>
 
-      <div className="grid md:grid-cols-3 gap-6">
-        {/* Company Profile Card */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Users className="h-5 w-5" />
-              Organisation
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <div>
-                <p className="text-lg font-medium">{user?.organisation}</p>
-                <p className="text-muted-foreground text-sm">
-                  {user?.employmentPosition || "No position specified"}
+      {showWelcomeCard && (
+        <Card className="border-primary/20 bg-primary/5">
+          <CardContent className="p-6">
+            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+              <div className="space-y-2">
+                <h3 className="text-lg font-medium">Welcome to SmartMinutes</h3>
+                <p className="text-sm text-muted-foreground">
+                  Streamline your meetings with AI-powered minutes, task management, and analytics.
                 </p>
               </div>
-              <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-                <div className="text-muted-foreground">Email:</div>
-                <div>{user?.email}</div>
-                {user?.mobile && (
-                  <>
-                    <div className="text-muted-foreground">Mobile:</div>
-                    <div>{user?.mobile}</div>
-                  </>
-                )}
+              <div className="flex gap-3 self-end md:self-center">
+                <Button variant="outline" asChild>
+                  <Link to="/meetings/create">
+                    <Plus className="h-4 w-4 mr-2" />
+                    Create Meeting
+                  </Link>
+                </Button>
+                <Button variant="ghost" size="icon" onClick={() => setShowWelcomeCard(false)}>
+                  ✕
+                </Button>
               </div>
             </div>
           </CardContent>
         </Card>
+      )}
 
-        {/* Upcoming Meetings Card */}
-        <Card className="md:col-span-2">
-          <CardHeader className="flex flex-row items-center justify-between">
-            <div>
-              <CardTitle className="flex items-center gap-2">
-                <CalendarIcon className="h-5 w-5" />
-                Upcoming Meetings
-              </CardTitle>
-              <CardDescription>
-                Your next scheduled meetings
-              </CardDescription>
-            </div>
-            <Button variant="outline" size="sm" asChild>
-              <Link to="/meetings">View All</Link>
-            </Button>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-lg flex items-center">
+              <UserCheck className="h-5 w-5 mr-2 text-primary" />
+              Organization
+            </CardTitle>
           </CardHeader>
-          <CardContent>
-            {loading.meetings ? (
-              <div className="flex justify-center my-8">
-                <Spinner size="lg" />
+          <CardContent className="pb-2">
+            <p className="text-2xl font-semibold">{user?.organisation}</p>
+            <p className="text-sm text-muted-foreground">
+              {user?.employmentPosition || 'Team Member'}
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-lg flex items-center">
+              <Calendar className="h-5 w-5 mr-2 text-primary" />
+              Upcoming Meetings
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pb-2">
+            {loadingMeetings ? (
+              <div className="space-y-2">
+                <Skeleton className="h-5 w-full" />
+                <Skeleton className="h-5 w-4/5" />
               </div>
-            ) : upcomingMeetings.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">
-                <p>No upcoming meetings</p>
-                <Button variant="link" asChild className="mt-2">
+            ) : (
+              <p className="text-2xl font-semibold">
+                {recentMeetings?.totalMeetings || 0}
+              </p>
+            )}
+          </CardContent>
+          <CardFooter>
+            <Button variant="ghost" size="sm" asChild>
+              <Link to="/meetings">View all meetings</Link>
+            </Button>
+          </CardFooter>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-lg flex items-center">
+              <CheckCircle2 className="h-5 w-5 mr-2 text-primary" />
+              My Tasks
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pb-2">
+            {loadingTasks ? (
+              <div className="space-y-2">
+                <Skeleton className="h-5 w-full" />
+                <Skeleton className="h-5 w-4/5" />
+              </div>
+            ) : (
+              <p className="text-2xl font-semibold">
+                {assignedTasks?.totalTasks || 0}
+              </p>
+            )}
+          </CardContent>
+          <CardFooter>
+            <Button variant="ghost" size="sm" asChild>
+              <Link to="/tasks">View all tasks</Link>
+            </Button>
+          </CardFooter>
+        </Card>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Recent Meetings */}
+        <Card className="col-span-1">
+          <CardHeader>
+            <CardTitle className="text-xl">Recent Meetings</CardTitle>
+            <CardDescription>Your recently scheduled meetings</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {loadingMeetings ? (
+              <>
+                <Skeleton className="h-16 w-full" />
+                <Skeleton className="h-16 w-full" />
+                <Skeleton className="h-16 w-full" />
+              </>
+            ) : recentMeetings?.meetings && recentMeetings.meetings.length > 0 ? (
+              recentMeetings.meetings.map((meeting) => (
+                <div
+                  key={meeting.meetingId}
+                  className="flex justify-between items-center border rounded-lg p-3"
+                >
+                  <div>
+                    <p className="font-medium">{meeting.name}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {formatDate(meeting.dateTime)}
+                    </p>
+                  </div>
+                  <Button variant="outline" size="sm" asChild>
+                    <Link to={`/meetings/${meeting.meetingId}`}>
+                      View
+                    </Link>
+                  </Button>
+                </div>
+              ))
+            ) : (
+              <div className="text-center py-6 text-muted-foreground">
+                <Calendar className="h-12 w-12 mx-auto mb-2 opacity-20" />
+                <p>No meetings scheduled yet</p>
+                <Button variant="outline" size="sm" className="mt-2" asChild>
                   <Link to="/meetings/create">Schedule a meeting</Link>
                 </Button>
               </div>
-            ) : (
-              <div className="space-y-4">
-                {upcomingMeetings.map((meeting) => (
-                  <div key={meeting.meetingId} className="flex items-center justify-between p-3 border rounded-md">
+            )}
+          </CardContent>
+          <CardFooter>
+            <Button variant="outline" asChild>
+              <Link to="/meetings">
+                View All Meetings
+              </Link>
+            </Button>
+          </CardFooter>
+        </Card>
+
+        {/* My Tasks */}
+        <Card className="col-span-1">
+          <CardHeader>
+            <CardTitle className="text-xl">My Tasks</CardTitle>
+            <CardDescription>Tasks assigned to you</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {loadingTasks ? (
+              <>
+                <Skeleton className="h-16 w-full" />
+                <Skeleton className="h-16 w-full" />
+                <Skeleton className="h-16 w-full" />
+              </>
+            ) : assignedTasks?.tasks && assignedTasks.tasks.length > 0 ? (
+              assignedTasks.tasks.map((task) => (
+                <div
+                  key={task.taskId}
+                  className="flex justify-between items-center border rounded-lg p-3"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className={`w-3 h-3 rounded-full ${getTaskStatusColor(task.progress)}`} />
                     <div>
-                      <Link 
-                        to={`/meetings/${meeting.meetingId}`}
-                        className="font-medium hover:underline"
-                      >
-                        {meeting.name}
-                      </Link>
-                      <div className="text-sm text-muted-foreground flex items-center gap-1">
-                        <CalendarIcon className="h-3 w-3" />
-                        {getRelativeTime(meeting.dateTime)}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Badge variant="outline" className={meeting.userRole === 'host' ? 'bg-primary/10 text-primary' : ''}>
-                        {meeting.userRole === 'host' ? 'Host' : 'Attendee'}
-                      </Badge>
-                      <Button size="sm" variant="ghost" asChild>
-                        <Link to={`/meetings/${meeting.meetingId}`}>
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Link>
-                      </Button>
+                      <p className="font-medium">{task.taskName}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {task.meeting?.name || "No meeting"} · Due: {formatDate(task.deadline)}
+                      </p>
                     </div>
                   </div>
-                ))}
+                  <Button variant="outline" size="sm" asChild>
+                    <Link to={`/tasks#${task.taskId}`}>
+                      View
+                    </Link>
+                  </Button>
+                </div>
+              ))
+            ) : (
+              <div className="text-center py-6 text-muted-foreground">
+                <Clock className="h-12 w-12 mx-auto mb-2 opacity-20" />
+                <p>No tasks assigned to you</p>
               </div>
             )}
           </CardContent>
+          <CardFooter>
+            <Button variant="outline" asChild>
+              <Link to="/tasks">
+                View All Tasks
+              </Link>
+            </Button>
+          </CardFooter>
         </Card>
       </div>
-
-      {/* Tasks Card */}
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <div>
-            <CardTitle>My Tasks</CardTitle>
-            <CardDescription>
-              Your prioritized tasks
-            </CardDescription>
-          </div>
-          <Button variant="outline" size="sm" asChild>
-            <Link to="/tasks">View All</Link>
-          </Button>
-        </CardHeader>
-        <CardContent>
-          {loading.tasks ? (
-            <div className="flex justify-center my-8">
-              <Spinner size="lg" />
-            </div>
-          ) : recentTasks.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              <p>No tasks assigned to you</p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {recentTasks.map((task) => (
-                <div key={task.taskId} className="p-4 border rounded-md">
-                  <div className="flex flex-wrap items-start justify-between gap-2">
-                    <div className="space-y-1">
-                      <div className="font-medium">{task.taskName}</div>
-                      {task.meeting && (
-                        <Link 
-                          to={`/meetings/${task.meeting.meetingId}`} 
-                          className="text-sm text-primary hover:underline"
-                        >
-                          {task.meeting.name}
-                        </Link>
-                      )}
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      {getTaskStatusBadge(task.progress)}
-                      <Badge variant="outline" className={`task-priority-${task.priority}`}>
-                        Priority: {task.priority}
-                      </Badge>
-                    </div>
-                  </div>
-                  <div className="mt-2 text-sm text-muted-foreground">
-                    Due: {formatDate(task.deadline)}
-                  </div>
-                  {task.additionalComments && (
-                    <p className="mt-2 text-sm text-gray-700">{task.additionalComments}</p>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
     </div>
   );
 }
