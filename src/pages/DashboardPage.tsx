@@ -1,345 +1,209 @@
-import { useState } from "react";
-import { useAuth } from "@/context/AuthContext";
+
+import React, { useEffect, useState } from "react";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Calendar, CheckCircle2, Clock, Plus, UserCheck, ArrowUp, ArrowDown } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { CalendarIcon, Clock } from "lucide-react";
 import { Link } from "react-router-dom";
-import { Skeleton } from "@/components/ui/skeleton";
+import { useAuth } from "@/context/AuthContext";
 import { useQuery } from "@tanstack/react-query";
 import { meetingService } from "@/services/meetingService";
 import { taskService } from "@/services/taskService";
-import { Progress } from "@/components/ui/progress";
-import { PieChart, Pie, Cell } from "recharts";
+import { format } from "date-fns";
+import { Skeleton } from "@/components/ui/skeleton";
+import { TaskProgressChart } from "@/components/TaskProgressChart";
 
-export default function DashboardPage() {
+const DashboardPage: React.FC = () => {
   const { user } = useAuth();
-  const [showWelcomeCard, setShowWelcomeCard] = useState(true);
+  const [activeTab, setActiveTab] = useState("overview");
 
-  // Fetch recent meetings
-  const { data: recentMeetings, isLoading: loadingMeetings } = useQuery({
-    queryKey: ['meetings', 'recent'],
-    queryFn: () => meetingService.getMeetings(1, 3),
+  // Fetch upcoming meetings
+  const { data: meetingsData, isLoading: loadingMeetings } = useQuery({
+    queryKey: ["upcoming-meetings"],
+    queryFn: () => meetingService.getMeetings(1, 5),
   });
 
   // Fetch assigned tasks
-  const { data: assignedTasks, isLoading: loadingTasks } = useQuery({
-    queryKey: ['tasks', 'assigned'],
+  const { data: tasksData, isLoading: loadingTasks } = useQuery({
+    queryKey: ["assigned-tasks"],
     queryFn: () => taskService.getAssignedTasks(1, 5),
   });
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return new Intl.DateTimeFormat('en-US', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-    }).format(date);
-  };
+  // Fetch task statistics
+  const { data: taskStats, isLoading: loadingTaskStats } = useQuery({
+    queryKey: ["task-statistics"],
+    queryFn: () => taskService.getTaskStatistics(),
+  });
 
-  const getTaskStatusColor = (progress: string) => {
-    switch (progress) {
-      case 'Not Started': return 'bg-gray-200';
-      case 'In Progress': return 'bg-blue-200';
-      case 'Completed': return 'bg-green-200';
-      case 'Blocked': return 'bg-red-200';
-      default: return 'bg-gray-200';
+  // Format date for display
+  const formatDate = (dateString: string) => {
+    try {
+      const date = new Date(dateString);
+      return format(date, "MMM d, yyyy h:mm a");
+    } catch (error) {
+      return "Invalid date";
     }
   };
-
-  // Calculate task progress stats
-  const taskStats = React.useMemo(() => {
-    if (!assignedTasks?.tasks) return { completed: 0, total: 0, percentage: 0 };
-    
-    const total = assignedTasks.tasks.length;
-    const completed = assignedTasks.tasks.filter(task => task.progress === 'Completed').length;
-    const percentage = total > 0 ? Math.floor((completed / total) * 100) : 0;
-    
-    return { completed, total, percentage };
-  }, [assignedTasks]);
-
-  // Generate task status data for pie chart
-  const taskStatusData = React.useMemo(() => {
-    if (!assignedTasks?.tasks) return [];
-    
-    const statusCounts: Record<string, number> = {
-      'Not Started': 0,
-      'In Progress': 0,
-      'Completed': 0,
-      'Blocked': 0
-    };
-    
-    assignedTasks.tasks.forEach(task => {
-      if (task.progress in statusCounts) {
-        statusCounts[task.progress]++;
-      }
-    });
-    
-    return Object.entries(statusCounts).map(([name, value]) => ({ name, value }));
-  }, [assignedTasks]);
-
-  // Colors for pie chart
-  const STATUS_COLORS = ['#94a3b8', '#3b82f6', '#22c55e', '#ef4444'];
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold">Dashboard</h1>
-        <p className="text-muted-foreground">Welcome back, {user?.name}</p>
+        <h1 className="text-2xl font-bold">Welcome, {user?.name}</h1>
+        <p className="text-muted-foreground">Here's an overview of your meetings and tasks</p>
       </div>
 
-      {showWelcomeCard && (
-        <Card className="border-primary/20 bg-primary/5">
-          <CardContent className="p-6">
-            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-              <div className="space-y-2">
-                <h3 className="text-lg font-medium">Welcome to SmartMinutes</h3>
-                <p className="text-sm text-muted-foreground">
-                  Streamline your meetings with AI-powered minutes, task management, and analytics.
-                </p>
-              </div>
-              <div className="flex gap-3 self-end md:self-center">
-                <Button variant="outline" asChild>
-                  <Link to="/meetings/create">
-                    <Plus className="h-4 w-4 mr-2" />
-                    Create Meeting
-                  </Link>
-                </Button>
-                <Button variant="ghost" size="icon" onClick={() => setShowWelcomeCard(false)}>
-                  ✕
-                </Button>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-lg flex items-center">
-              <UserCheck className="h-5 w-5 mr-2 text-primary" />
-              Organization
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="pb-2">
-            <p className="text-2xl font-semibold">{user?.organisation}</p>
-            <p className="text-sm text-muted-foreground">
-              {user?.employmentPosition || 'Team Member'}
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-lg flex items-center">
-              <Calendar className="h-5 w-5 mr-2 text-primary" />
-              Upcoming Meetings
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="pb-2">
-            {loadingMeetings ? (
-              <div className="space-y-2">
-                <Skeleton className="h-5 w-full" />
-                <Skeleton className="h-5 w-4/5" />
-              </div>
-            ) : (
-              <p className="text-2xl font-semibold">
-                {recentMeetings?.totalMeetings || 0}
-              </p>
-            )}
-          </CardContent>
-          <CardFooter>
-            <Button variant="ghost" size="sm" asChild>
-              <Link to="/meetings">View all meetings</Link>
-            </Button>
-          </CardFooter>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-lg flex items-center">
-              <CheckCircle2 className="h-5 w-5 mr-2 text-primary" />
-              My Tasks
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="pb-2">
-            {loadingTasks ? (
-              <div className="space-y-2">
-                <Skeleton className="h-5 w-full" />
-                <Skeleton className="h-5 w-4/5" />
-              </div>
-            ) : (
-              <p className="text-2xl font-semibold">
-                {assignedTasks?.totalTasks || 0}
-              </p>
-            )}
-          </CardContent>
-          <CardFooter>
-            <Button variant="ghost" size="sm" asChild>
-              <Link to="/tasks">View all tasks</Link>
-            </Button>
-          </CardFooter>
-        </Card>
-      </div>
-
-      <Card className="col-span-1">
-        <CardHeader>
-          <CardTitle className="text-xl">Task Progress</CardTitle>
-          <CardDescription>Your progress on assigned tasks</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {loadingTasks ? (
-            <div className="space-y-4">
-              <Skeleton className="h-8 w-full" />
-              <Skeleton className="h-40 w-full" />
-            </div>
-          ) : assignedTasks?.tasks && assignedTasks.tasks.length > 0 ? (
-            <div className="space-y-6">
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">Overall Completion</span>
-                  <span className="font-medium">{taskStats.percentage}%</span>
-                </div>
-                <Progress value={taskStats.percentage} className="h-2" />
-                <p className="text-xs text-muted-foreground mt-2">
-                  {taskStats.completed} out of {taskStats.total} tasks completed
-                </p>
-              </div>
-              
-              <div className="pt-4">
-                <h4 className="text-sm font-medium mb-2">Tasks by Status</h4>
-                <div className="h-[180px] flex items-center justify-center">
-                  <PieChart width={200} height={180}>
-                    <Pie
-                      data={taskStatusData}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={30}
-                      outerRadius={60}
-                      paddingAngle={1}
-                      dataKey="value"
-                      label={({ name, percent }) => 
-                        percent > 0.05 ? `${name}: ${(percent * 100).toFixed(0)}%` : ''
-                      }
-                    >
-                      {taskStatusData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={STATUS_COLORS[index % STATUS_COLORS.length]} />
-                      ))}
-                    </Pie>
-                  </PieChart>
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div className="text-center py-6 text-muted-foreground">
-              <Clock className="h-12 w-12 mx-auto mb-2 opacity-20" />
-              <p>No tasks assigned to you</p>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card className="col-span-1">
-          <CardHeader>
-            <CardTitle className="text-xl">Recent Meetings</CardTitle>
-            <CardDescription>Your recently scheduled meetings</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {loadingMeetings ? (
-              <>
-                <Skeleton className="h-16 w-full" />
-                <Skeleton className="h-16 w-full" />
-                <Skeleton className="h-16 w-full" />
-              </>
-            ) : recentMeetings?.meetings && recentMeetings.meetings.length > 0 ? (
-              recentMeetings.meetings.map((meeting) => (
-                <div
-                  key={meeting.meetingId}
-                  className="flex justify-between items-center border rounded-lg p-3"
-                >
-                  <div>
-                    <p className="font-medium">{meeting.name}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {formatDate(meeting.dateTime)}
-                    </p>
-                  </div>
-                  <Button variant="outline" size="sm" asChild>
-                    <Link to={`/meetings/${meeting.meetingId}`}>
-                      View
-                    </Link>
-                  </Button>
-                </div>
-              ))
-            ) : (
-              <div className="text-center py-6 text-muted-foreground">
-                <Calendar className="h-12 w-12 mx-auto mb-2 opacity-20" />
-                <p>No meetings scheduled yet</p>
-                <Button variant="outline" size="sm" className="mt-2" asChild>
-                  <Link to="/meetings/create">Schedule a meeting</Link>
-                </Button>
-              </div>
-            )}
-          </CardContent>
-          <CardFooter>
-            <Button variant="outline" asChild>
-              <Link to="/meetings">
-                View All Meetings
-              </Link>
-            </Button>
-          </CardFooter>
-        </Card>
-
-        <Card className="col-span-1">
-          <CardHeader>
-            <CardTitle className="text-xl">My Tasks</CardTitle>
-            <CardDescription>Tasks assigned to you</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {loadingTasks ? (
-              <>
-                <Skeleton className="h-16 w-full" />
-                <Skeleton className="h-16 w-full" />
-                <Skeleton className="h-16 w-full" />
-              </>
-            ) : assignedTasks?.tasks && assignedTasks.tasks.length > 0 ? (
-              assignedTasks.tasks.map((task) => (
-                <div
-                  key={task.taskId}
-                  className="flex justify-between items-center border rounded-lg p-3"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className={`w-3 h-3 rounded-full ${getTaskStatusColor(task.progress)}`} />
-                    <div>
-                      <p className="font-medium">{task.taskName}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {task.meeting?.name || "No meeting"} · Due: {formatDate(task.deadline)}
-                      </p>
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="statistics">Statistics</TabsTrigger>
+        </TabsList>
+        
+        <TabsContent value="overview" className="space-y-4">
+          {/* Meetings Section */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Upcoming Meetings</CardTitle>
+              <CardDescription>Your next 5 meetings</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {loadingMeetings ? (
+                <div className="space-y-4">
+                  {[...Array(3)].map((_, i) => (
+                    <div key={i} className="flex items-center space-x-4">
+                      <Skeleton className="h-12 w-12 rounded-full" />
+                      <div className="space-y-2">
+                        <Skeleton className="h-4 w-[250px]" />
+                        <Skeleton className="h-4 w-[200px]" />
+                      </div>
                     </div>
-                  </div>
-                  <Button variant="outline" size="sm" asChild>
-                    <Link to={`/tasks#${task.taskId}`}>
-                      View
-                    </Link>
-                  </Button>
+                  ))}
                 </div>
-              ))
-            ) : (
-              <div className="text-center py-6 text-muted-foreground">
-                <Clock className="h-12 w-12 mx-auto mb-2 opacity-20" />
-                <p>No tasks assigned to you</p>
-              </div>
-            )}
-          </CardContent>
-          <CardFooter>
-            <Button variant="outline" asChild>
-              <Link to="/tasks">
-                View All Tasks
-              </Link>
-            </Button>
-          </CardFooter>
-        </Card>
-      </div>
+              ) : meetingsData?.meetings && meetingsData.meetings.length > 0 ? (
+                <div className="space-y-4">
+                  {meetingsData.meetings.map((meeting) => (
+                    <Link 
+                      to={`/meetings/${meeting.meetingId}`} 
+                      key={meeting.meetingId}
+                      className="flex items-start space-x-4 p-3 rounded-md hover:bg-muted/50 transition-colors"
+                    >
+                      <div className="rounded-full bg-primary/10 p-2">
+                        <CalendarIcon className="h-5 w-5 text-primary" />
+                      </div>
+                      <div>
+                        <h3 className="font-medium">{meeting.name}</h3>
+                        <div className="flex items-center text-sm text-muted-foreground">
+                          <Clock className="mr-1 h-3 w-3" />
+                          <span>{formatDate(meeting.dateTime)}</span>
+                        </div>
+                        <span className="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 border-transparent bg-secondary text-secondary-foreground hover:bg-secondary/80">
+                          {meeting.userRole === "host" ? "Host" : "Attendee"}
+                        </span>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-muted-foreground text-center py-6">No upcoming meetings</p>
+              )}
+            </CardContent>
+            <CardFooter>
+              <Button asChild>
+                <Link to="/meetings">View all meetings</Link>
+              </Button>
+            </CardFooter>
+          </Card>
+
+          {/* Tasks Section */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Your Tasks</CardTitle>
+              <CardDescription>Tasks assigned to you</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {loadingTasks ? (
+                <div className="space-y-4">
+                  {[...Array(3)].map((_, i) => (
+                    <div key={i} className="flex items-center space-x-4">
+                      <Skeleton className="h-12 w-12 rounded-full" />
+                      <div className="space-y-2">
+                        <Skeleton className="h-4 w-[250px]" />
+                        <Skeleton className="h-4 w-[200px]" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : tasksData?.tasks && tasksData.tasks.length > 0 ? (
+                <div className="space-y-4">
+                  {tasksData.tasks.map((task) => (
+                    <div 
+                      key={task.taskId}
+                      className="flex items-start justify-between space-x-4 p-3 rounded-md hover:bg-muted/50 transition-colors"
+                    >
+                      <div className="space-y-1">
+                        <h3 className="font-medium">{task.taskName}</h3>
+                        <div className="flex flex-wrap items-center gap-2 text-sm">
+                          <span className="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 border-transparent bg-primary text-primary-foreground">
+                            {task.progress}
+                          </span>
+                          <span className="text-muted-foreground">Due: {format(new Date(task.deadline), "MMM d")}</span>
+                          {task.meeting && (
+                            <Link to={`/meetings/${task.meeting.meetingId}`} className="text-primary underline-offset-4 hover:underline">
+                              {task.meeting.name}
+                            </Link>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold 
+                          ${task.priority === 3 ? "bg-red-100 text-red-800" : 
+                            task.priority === 2 ? "bg-yellow-100 text-yellow-800" : 
+                            "bg-green-100 text-green-800"}`}>
+                          {task.priority === 3 ? "High" : task.priority === 2 ? "Medium" : "Low"}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-muted-foreground text-center py-6">No tasks assigned to you</p>
+              )}
+            </CardContent>
+            <CardFooter>
+              <Button asChild>
+                <Link to="/tasks">View all tasks</Link>
+              </Button>
+            </CardFooter>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="statistics" className="space-y-4">
+          {loadingTaskStats ? (
+            <div className="space-y-4">
+              {[...Array(3)].map((_, i) => (
+                <Skeleton key={i} className="h-[200px] w-full" />
+              ))}
+            </div>
+          ) : taskStats ? (
+            <TaskProgressChart 
+              taskCompletion={{
+                total: taskStats.tasksByStatus.reduce((acc, curr) => acc + curr.value, 0),
+                completed: taskStats.tasksByStatus.find(s => s.name === "Completed")?.value || 0,
+                percentage: taskStats.completionRate
+              }}
+              tasksByStatus={taskStats.tasksByStatus}
+              tasksByPriority={taskStats.tasksByPriority}
+            />
+          ) : (
+            <Card>
+              <CardContent className="py-10">
+                <p className="text-center text-muted-foreground">No task statistics available</p>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+      </Tabs>
     </div>
   );
-}
+};
+
+export default DashboardPage;

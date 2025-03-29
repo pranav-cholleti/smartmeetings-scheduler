@@ -1,284 +1,322 @@
+
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
+import * as z from "zod";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
-import { CalendarIcon, Plus, X } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
-import { toast } from "sonner";
-import { cn } from "@/lib/utils";
+import { CalendarIcon, Trash, X } from "lucide-react";
+
 import { meetingService } from "@/services/meetingService";
 import { Button } from "@/components/ui/button";
-import { Calendar } from "@/components/ui/calendar";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Switch } from "@/components/ui/switch";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Textarea } from "@/components/ui/textarea";
-import { Avatar } from "@/components/ui/avatar";
+import { toast } from "sonner";
+import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 
-// Form schema
+// Form schema validation
 const formSchema = z.object({
-  name: z.string().min(3, "Meeting name must be at least 3 characters"),
-  dateTime: z.date(),
-  attendees: z.array(z.string()),
+  name: z.string().min(3, {
+    message: "Meeting name must be at least 3 characters",
+  }),
+  dateTime: z.date({
+    required_error: "Please select a date and time for the meeting",
+  }),
   isOnline: z.boolean().default(true),
   meetingLink: z.string().optional(),
   additionalComments: z.string().optional(),
 });
 
-// Meeting creation form component
+type FormValues = z.infer<typeof formSchema>;
+
 export default function CreateMeetingPage() {
   const navigate = useNavigate();
-  const [selectedUsers, setSelectedUsers] = useState<{ id: string; name: string; email: string }[]>([]);
-  const [searchQuery, setSearchQuery] = useState("");
-  
+  const [selectedAttendees, setSelectedAttendees] = useState<{userId: string; name: string; email: string}[]>([]);
+  const [searchTerm, setSearchTerm] = useState("");
+
   // Form setup
-  const form = useForm<z.infer<typeof formSchema>>({
+  const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       name: "",
-      dateTime: new Date(),
-      attendees: [],
       isOnline: true,
       meetingLink: "",
       additionalComments: "",
     },
   });
 
-  // Handle form submission
-  const onSubmit = async (values: z.infer<typeof formSchema>) => {
-    try {
-      const meetingData = {
-        ...values,
-        dateTime: format(values.dateTime, "yyyy-MM-dd'T'HH:mm:ss"),
-        attendees: selectedUsers.map(user => user.id),
-      };
-      
-      const createdMeeting = await meetingService.createMeeting(meetingData);
-      toast.success("Meeting created successfully");
-      navigate(`/meetings/${createdMeeting.meetingId}`);
-    } catch (error) {
+  // Create meeting mutation
+  const createMeetingMutation = useMutation({
+    mutationFn: (data: FormValues & { attendees: string[] }) => {
+      return meetingService.createMeeting({
+        name: data.name,
+        dateTime: data.dateTime.toISOString(),
+        attendees: data.attendees,
+        isOnline: data.isOnline,
+        meetingLink: data.meetingLink,
+        additionalComments: data.additionalComments,
+      });
+    },
+    onSuccess: (data) => {
+      toast.success("Meeting created successfully!");
+      navigate(`/meetings/${data._id}`);
+    },
+    onError: () => {
       toast.error("Failed to create meeting");
-      console.error("Error creating meeting:", error);
-    }
-  };
-
-  // Fetch organization users
-  const { data: users, isLoading: loadingUsers } = useQuery({
-    queryKey: ["organization-users", searchQuery],
-    queryFn: () => meetingService.getOrganizationUsers(searchQuery),
+    },
   });
 
-  // Handle adding a user as attendee
-  const handleAddUser = (user: { id: string; name: string; email: string }) => {
-    if (!selectedUsers.some(u => u.id === user.id)) {
-      setSelectedUsers([...selectedUsers, user]);
-      form.setValue('attendees', [...form.getValues('attendees'), user.id]);
+  // Fetch organization users for attendee selection
+  const { data: users, isLoading: loadingUsers } = useQuery({
+    queryKey: ["organization-users", searchTerm],
+    queryFn: () => meetingService.getOrganizationUsers(searchTerm),
+  });
+
+  // Form submission handler
+  const onSubmit = (values: FormValues) => {
+    const attendeeIds = selectedAttendees.map(attendee => attendee.userId);
+    createMeetingMutation.mutate({
+      ...values,
+      attendees: attendeeIds,
+    });
+  };
+
+  // Handle adding attendees
+  const handleSelectAttendee = (user: {userId: string; name: string; email: string}) => {
+    if (!selectedAttendees.some(attendee => attendee.userId === user.userId)) {
+      setSelectedAttendees(prev => [...prev, user]);
     }
+    setSearchTerm("");
   };
 
-  // Handle removing a user from attendees
-  const handleRemoveUser = (userId: string) => {
-    setSelectedUsers(selectedUsers.filter(user => user.id !== userId));
-    form.setValue('attendees', form.getValues('attendees').filter(id => id !== userId));
+  // Handle removing attendees
+  const handleRemoveAttendee = (userId: string) => {
+    setSelectedAttendees(prev => prev.filter(attendee => attendee.userId !== userId));
   };
-
-  // Filter users for dropdown
-  const filteredUsers = users?.filter(user => 
-    !selectedUsers.some(selectedUser => selectedUser.id === user.id) &&
-    (user.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-     user.email.toLowerCase().includes(searchQuery.toLowerCase()))
-  );
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Create Meeting</CardTitle>
-        <CardDescription>Schedule a new meeting with your team</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
-            <FormField
-              control={form.control}
-              name="name"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Meeting Name</FormLabel>
-                  <FormControl>
-                    <Input placeholder="Enter meeting name" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="dateTime"
-              render={({ field }) => (
-                <FormItem className="flex flex-col">
-                  <FormLabel>Date and Time</FormLabel>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <FormControl>
-                        <Button
-                          variant={"outline"}
-                          className={cn(
-                            "w-[240px] pl-3 text-left font-normal",
-                            !field.value && "text-muted-foreground"
-                          )}
-                        >
-                          {field.value ? (
-                            format(field.value, "PPP h:mm a")
-                          ) : (
-                            <span>Pick a date and time</span>
-                          )}
-                          <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                        </Button>
-                      </FormControl>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0" align="start">
-                      <Calendar
-                        mode="single"
-                        selected={field.value}
-                        onSelect={field.onChange}
-                        disabled={(date) =>
-                          date < new Date()
-                        }
-                        initialFocus
-                      />
-                    </PopoverContent>
-                  </Popover>
-                  <FormDescription>
-                    Select the date and time for the meeting.
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <div className="space-y-2">
-              <FormLabel>Attendees</FormLabel>
-              <Card className="border-none shadow-sm">
-                <CardContent>
-                  <div className="flex flex-wrap gap-2">
-                    {selectedUsers.map(user => (
-                      <Badge key={user.id} variant="secondary" className="gap-x-2 items-center">
-                        <Avatar className="h-5 w-5">
-                          <AvatarFallback>{user.name.charAt(0).toUpperCase()}</AvatarFallback>
-                        </Avatar>
-                        {user.name}
-                        <Button variant="ghost" size="icon" onClick={() => handleRemoveUser(user.id)}>
-                          <X className="h-4 w-4" />
-                        </Button>
-                      </Badge>
-                    ))}
-                  </div>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button variant="outline" className="mt-4">
-                        <Plus className="mr-2 h-4 w-4" />
-                        Add Attendees
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-[300px]">
-                      <div className="space-y-2">
-                        <Input
-                          type="search"
-                          placeholder="Search users..."
-                          value={searchQuery}
-                          onChange={(e) => setSearchQuery(e.target.value)}
-                        />
-                        {loadingUsers ? (
-                          <p>Loading users...</p>
-                        ) : filteredUsers && filteredUsers.length > 0 ? (
-                          filteredUsers.map(user => (
-                            <Button
-                              key={user.id}
-                              variant="ghost"
-                              className="w-full justify-start"
-                              onClick={() => handleAddUser(user)}
-                            >
-                              <Avatar className="mr-2 h-5 w-5">
-                                <AvatarFallback>{user.name.charAt(0).toUpperCase()}</AvatarFallback>
-                              </Avatar>
-                              {user.name} ({user.email})
-                            </Button>
-                          ))
-                        ) : (
-                          <p>No users found.</p>
-                        )}
-                      </div>
-                    </PopoverContent>
-                  </Popover>
-                </CardContent>
-              </Card>
-              <FormDescription>
-                Add people to the meeting.
-              </FormDescription>
-              <FormMessage />
-            </div>
-            <FormField
-              control={form.control}
-              name="isOnline"
-              render={({ field }) => (
-                <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
-                  <div className="space-y-0.5">
-                    <FormLabel className="text-base">Online Meeting</FormLabel>
-                    <FormDescription>
-                      Enable if this meeting will be conducted online.
-                    </FormDescription>
-                  </div>
-                  <FormControl>
-                    <Switch
-                      checked={field.value}
-                      onCheckedChange={field.onChange}
-                    />
-                  </FormControl>
-                </FormItem>
-              )}
-            />
-            {form.getValues("isOnline") && (
+    <div className="mx-auto max-w-4xl">
+      <Card>
+        <CardHeader>
+          <CardTitle>Create New Meeting</CardTitle>
+          <CardDescription>Schedule a new meeting and invite attendees</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
               <FormField
                 control={form.control}
-                name="meetingLink"
+                name="name"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Meeting Link</FormLabel>
+                    <FormLabel>Meeting Name</FormLabel>
                     <FormControl>
-                      <Input placeholder="Enter meeting link" {...field} />
+                      <Input placeholder="Quarterly Planning Meeting" {...field} />
                     </FormControl>
+                    <FormDescription>
+                      Enter a descriptive name for your meeting
+                    </FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
               />
-            )}
-            <FormField
-              control={form.control}
-              name="additionalComments"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Additional Comments</FormLabel>
-                  <FormControl>
-                    <Textarea
-                      placeholder="Add any additional comments here."
-                      className="resize-none"
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
+
+              <FormField
+                control={form.control}
+                name="dateTime"
+                render={({ field }) => (
+                  <FormItem className="flex flex-col">
+                    <FormLabel>Date and Time</FormLabel>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <FormControl>
+                          <Button
+                            variant={"outline"}
+                            className={`w-full pl-3 text-left font-normal ${!field.value ? "text-muted-foreground" : ""}`}
+                          >
+                            {field.value ? (
+                              format(field.value, "PPP p")
+                            ) : (
+                              <span>Pick a date</span>
+                            )}
+                            <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                          </Button>
+                        </FormControl>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar
+                          mode="single"
+                          selected={field.value}
+                          onSelect={field.onChange}
+                          initialFocus
+                        />
+                        <div className="p-3 border-t">
+                          <Input
+                            type="time"
+                            value={field.value ? format(field.value, "HH:mm") : ""}
+                            onChange={(e) => {
+                              const date = field.value || new Date();
+                              const [hours, minutes] = e.target.value.split(":");
+                              date.setHours(parseInt(hours), parseInt(minutes));
+                              field.onChange(date);
+                            }}
+                          />
+                        </div>
+                      </PopoverContent>
+                    </Popover>
+                    <FormDescription>
+                      Select the date and time for the meeting
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <div className="space-y-2">
+                <FormLabel>Attendees</FormLabel>
+                <div className="flex flex-wrap gap-2 mb-4">
+                  {selectedAttendees.map((attendee) => (
+                    <Badge key={attendee.userId} variant="secondary" className="pl-2 flex items-center gap-1">
+                      <Avatar className="h-4 w-4 mr-1">
+                        <AvatarImage src={`https://avatar.vercel.sh/${attendee.email}.png`} />
+                        <AvatarFallback>{attendee.name.charAt(0)}</AvatarFallback>
+                      </Avatar>
+                      {attendee.name}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-4 w-4 p-0 ml-2"
+                        onClick={() => handleRemoveAttendee(attendee.userId)}
+                      >
+                        <X className="h-3 w-3" />
+                      </Button>
+                    </Badge>
+                  ))}
+                </div>
+                <Command>
+                  <CommandInput 
+                    placeholder="Search for people..." 
+                    value={searchTerm}
+                    onValueChange={setSearchTerm}
+                  />
+                  <CommandList>
+                    <CommandEmpty>No users found</CommandEmpty>
+                    <CommandGroup heading="Suggestions">
+                      {users && users.map((user) => (
+                        <CommandItem
+                          key={user.userId}
+                          onSelect={() => handleSelectAttendee({
+                            userId: user.userId,
+                            name: user.name,
+                            email: user.email
+                          })}
+                        >
+                          <Avatar className="h-6 w-6 mr-2">
+                            <AvatarImage src={`https://avatar.vercel.sh/${user.email}.png`} />
+                            <AvatarFallback>{user.name.charAt(0)}</AvatarFallback>
+                          </Avatar>
+                          <span>{user.name}</span>
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
+                <FormDescription>
+                  Search and select people to invite to this meeting
+                </FormDescription>
+              </div>
+
+              <Separator />
+
+              <FormField
+                control={form.control}
+                name="isOnline"
+                render={({ field }) => (
+                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                    <div className="space-y-0.5">
+                      <FormLabel className="text-base">Online Meeting</FormLabel>
+                      <FormDescription>
+                        Toggle if this is an online meeting
+                      </FormDescription>
+                    </div>
+                    <FormControl>
+                      <Switch
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                      />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+
+              {form.watch("isOnline") && (
+                <FormField
+                  control={form.control}
+                  name="meetingLink"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Meeting Link</FormLabel>
+                      <FormControl>
+                        <Input placeholder="https://meet.google.com/..." {...field} />
+                      </FormControl>
+                      <FormDescription>
+                        Provide a link for participants to join the online meeting
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
               )}
-            />
-            <CardFooter>
-              <Button type="submit">Create Meeting</Button>
-            </CardFooter>
-          </form>
-        </Form>
-      </CardContent>
-    </Card>
+
+              <FormField
+                control={form.control}
+                name="additionalComments"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Additional Comments</FormLabel>
+                    <FormControl>
+                      <Textarea
+                        placeholder="Please prepare the quarterly reports before the meeting..."
+                        className="resize-none"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      Any additional information or instructions for attendees
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <div className="flex justify-end space-x-2">
+                <Button 
+                  variant="outline" 
+                  type="button"
+                  onClick={() => navigate(-1)}
+                >
+                  Cancel
+                </Button>
+                <Button 
+                  type="submit" 
+                  disabled={createMeetingMutation.isPending}
+                >
+                  {createMeetingMutation.isPending ? "Creating..." : "Create Meeting"}
+                </Button>
+              </div>
+            </form>
+          </Form>
+        </CardContent>
+      </Card>
+    </div>
   );
 }

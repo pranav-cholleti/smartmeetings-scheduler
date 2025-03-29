@@ -1,6 +1,7 @@
+
 import { useState } from "react";
 import { useParams, Link } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { CalendarIcon, ChevronLeft, Clock, Download, User } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
@@ -17,14 +18,19 @@ import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { Spinner } from "@/components/ui/spinner";
+import { Textarea } from "@/components/ui/textarea";
+import { MinutesEditor } from "@/components/MinutesEditor";
+import { ActionItemsList } from "@/components/ActionItemsList";
+import { TaskProgressChart } from "@/components/TaskProgressChart";
 
 export default function MeetingDetailsPage() {
   const { meetingId } = useParams<{ meetingId: string }>();
   const [currentTab, setCurrentTab] = useState("overview");
   const [dashboardData, setDashboardData] = useState<any>(null);
+  const [isEditingMinutes, setIsEditingMinutes] = useState(false);
 
   // Fetch meeting details
-  const { data: meeting, isLoading, error } = useQuery({
+  const { data: meeting, isLoading, error, refetch } = useQuery({
     queryKey: ["meeting", meetingId],
     queryFn: () => meetingService.getMeetingDetails(meetingId!),
   });
@@ -34,45 +40,36 @@ export default function MeetingDetailsPage() {
     queryKey: ["meeting-dashboard", meetingId],
     queryFn: () => meetingService.getDashboard(meetingId!),
     enabled: !!meetingId && currentTab === "dashboard",
-    onSettled: (data) => {
+    onSuccess: (data) => {
       if (data) setDashboardData(data);
     }
   });
 
-  // Format date for display
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return format(date, "MMM d, yyyy h:mm a");
-  };
+  // Mutation for updating minutes
+  const updateMinutesMutation = useMutation({
+    mutationFn: (content: string) => meetingService.updateMinutes(meetingId!, content),
+    onSuccess: () => {
+      toast.success("Minutes saved successfully");
+      setIsEditingMinutes(false);
+      refetch();
+    },
+    onError: () => {
+      toast.error("Failed to save minutes");
+    }
+  });
 
-  // Generate placeholder stats if data isn't available
-  const getStatsData = () => {
-    if (dashboardData) return dashboardData;
-    
-    return {
-      taskCompletion: {
-        completed: 0,
-        total: 0,
-        percentage: 0
-      },
-      tasksByPriority: [
-        { name: 'High', value: 0 },
-        { name: 'Medium', value: 0 },
-        { name: 'Low', value: 0 }
-      ],
-      tasksByStatus: [
-        { name: 'Not Started', value: 0 },
-        { name: 'In Progress', value: 0 },
-        { name: 'Completed', value: 0 },
-        { name: 'Blocked', value: 0 }
-      ],
-      actionItemsByAssignee: [] 
-    };
-  };
-
-  // Colors for pie chart
-  const TASK_STATUS_COLORS = ['#94a3b8', '#3b82f6', '#22c55e', '#ef4444'];
-  const PRIORITY_COLORS = ['#ef4444', '#f97316', '#22c55e'];
+  // Mutation for extracting action items
+  const extractActionItemsMutation = useMutation({
+    mutationFn: () => meetingService.extractActionItems(meetingId!),
+    onSuccess: () => {
+      toast.success("Action items extracted successfully");
+      // Refetch dashboard data to get new action items
+      dashboard.refetch?.();
+    },
+    onError: () => {
+      toast.error("Failed to extract action items");
+    }
+  });
 
   // Handle download minutes
   const handleDownloadMinutes = async () => {
@@ -83,6 +80,22 @@ export default function MeetingDetailsPage() {
       toast.error("Failed to generate minutes PDF");
       console.error("Error generating PDF:", error);
     }
+  };
+
+  // Handle edit minutes
+  const handleEditMinutes = () => {
+    setIsEditingMinutes(true);
+  };
+
+  // Handle save minutes
+  const handleSaveMinutes = async (content: string) => {
+    await updateMinutesMutation.mutateAsync(content);
+  };
+
+  // Format date for display
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return format(date, "MMM d, yyyy h:mm a");
   };
 
   if (isLoading) {
@@ -110,7 +123,25 @@ export default function MeetingDetailsPage() {
     );
   }
 
-  const stats = getStatsData();
+  // Generate dashboard data
+  const stats = dashboardData ? dashboardData : {
+    taskCompletion: {
+      completed: 0,
+      total: 0,
+      percentage: 0
+    },
+    tasksByPriority: [
+      { name: 'High', value: 0 },
+      { name: 'Medium', value: 0 },
+      { name: 'Low', value: 0 }
+    ],
+    tasksByStatus: [
+      { name: 'Not Started', value: 0 },
+      { name: 'In Progress', value: 0 },
+      { name: 'Completed', value: 0 },
+      { name: 'Blocked', value: 0 }
+    ]
+  };
 
   return (
     <div className="space-y-6">
@@ -127,9 +158,9 @@ export default function MeetingDetailsPage() {
       <Tabs defaultValue="overview" className="space-y-4" onValueChange={setCurrentTab}>
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="dashboard" disabled={!meetingId}>Dashboard</TabsTrigger>
-          <TabsTrigger value="minutes" disabled>Minutes</TabsTrigger>
-          <TabsTrigger value="actions" disabled>Actions</TabsTrigger>
+          <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
+          <TabsTrigger value="minutes">Minutes</TabsTrigger>
+          <TabsTrigger value="actions">Actions</TabsTrigger>
         </TabsList>
         
         <TabsContent value="overview" className="space-y-4">
@@ -162,9 +193,12 @@ export default function MeetingDetailsPage() {
               )}
             </CardContent>
             <CardFooter>
-              <Button onClick={handleDownloadMinutes}>
+              <Button onClick={handleDownloadMinutes} className="mr-2">
                 <Download className="h-4 w-4 mr-2" />
                 Download Minutes
+              </Button>
+              <Button variant="outline" onClick={handleEditMinutes}>
+                Edit Minutes
               </Button>
             </CardFooter>
           </Card>
@@ -184,7 +218,7 @@ export default function MeetingDetailsPage() {
                   <div>
                     <p className="text-sm font-medium">{attendee.name}</p>
                     <p className="text-xs text-muted-foreground">{attendee.email}</p>
-                    {attendee.isHost && <Badge variant="secondary">Host</Badge>}
+                    {attendee.role === "host" && <Badge variant="secondary">Host</Badge>}
                   </div>
                 </div>
               ))}
@@ -211,83 +245,90 @@ export default function MeetingDetailsPage() {
               </CardContent>
             </Card>
           ) : (
-            <div className="space-y-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Task Completion</CardTitle>
-                  <CardDescription>Overall progress of assigned tasks</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-muted-foreground">Progress</span>
-                      <span className="font-medium">{stats.taskCompletion.percentage}%</span>
-                    </div>
-                    <Progress value={stats.taskCompletion.percentage} className="h-2" />
-                    <div className="text-sm text-muted-foreground mt-2">
-                      <span>{stats.taskCompletion.completed} out of {stats.taskCompletion.total} tasks completed</span>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>Tasks by Priority</CardTitle>
-                  <CardDescription>Distribution of tasks by priority level</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <ResponsiveContainer width="100%" height={300}>
-                    <BarChart data={stats.tasksByPriority}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="name" />
-                      <YAxis />
-                      <Tooltip />
-                      <Legend />
-                      <Bar dataKey="value" fill="#8884d8" />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>Tasks by Status</CardTitle>
-                  <CardDescription>Distribution of tasks by current status</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <ResponsiveContainer width="100%" height={300}>
-                    <PieChart>
-                      <Pie
-                        data={stats.tasksByStatus}
-                        dataKey="value"
-                        nameKey="name"
-                        cx="50%"
-                        cy="50%"
-                        outerRadius={80}
-                        fill="#8884d8"
-                        label
-                      >
-                        {
-                          stats.tasksByStatus.map((entry, index) => <Cell key={`cell-${index}`} fill={TASK_STATUS_COLORS[index % TASK_STATUS_COLORS.length]} />)
-                        }
-                      </Pie>
-                      <Tooltip />
-                      <Legend />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </CardContent>
-              </Card>
-            </div>
+            <TaskProgressChart 
+              taskCompletion={{
+                total: stats.tasksByStatus.reduce((acc, curr) => acc + curr.value, 0),
+                completed: stats.tasksByStatus.find(s => s.name === "Completed")?.value || 0,
+                percentage: stats.taskCompletion?.percentage || 0
+              }}
+              tasksByStatus={stats.tasksByStatus}
+              tasksByPriority={stats.tasksByPriority}
+            />
           )}
         </TabsContent>
 
-        <TabsContent value="minutes">
-          <div>Minutes Content</div>
+        <TabsContent value="minutes" className="space-y-4">
+          {isEditingMinutes ? (
+            <MinutesEditor 
+              initialContent={meeting?.formattedMinutesText || meeting?.extractedMinutesText || ""}
+              onSave={handleSaveMinutes}
+              onCancel={() => setIsEditingMinutes(false)}
+            />
+          ) : (
+            <Card>
+              <CardHeader>
+                <CardTitle>Meeting Minutes</CardTitle>
+                <CardDescription>
+                  Summary and notes from the meeting
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {meeting?.formattedMinutesText ? (
+                  <div className="prose max-w-none">
+                    <div dangerouslySetInnerHTML={{ __html: meeting.formattedMinutesText.replace(/\n/g, '<br/>') }} />
+                  </div>
+                ) : meeting?.extractedMinutesText ? (
+                  <div className="prose max-w-none">
+                    <div dangerouslySetInnerHTML={{ __html: meeting.extractedMinutesText.replace(/\n/g, '<br/>') }} />
+                  </div>
+                ) : meeting?.uploadedMinutes ? (
+                  <div className="text-center p-4">
+                    <p>Minutes have been uploaded as a file.</p>
+                    <Button variant="outline" className="mt-2" onClick={handleDownloadMinutes}>
+                      <Download className="h-4 w-4 mr-2" />
+                      Download Minutes
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="text-center p-4">
+                    <p className="text-muted-foreground">No minutes available for this meeting yet.</p>
+                    <Button variant="outline" className="mt-4" onClick={handleEditMinutes}>
+                      Add Minutes
+                    </Button>
+                  </div>
+                )}
+              </CardContent>
+              {(meeting?.formattedMinutesText || meeting?.extractedMinutesText) && (
+                <CardFooter>
+                  <Button variant="outline" onClick={handleEditMinutes}>
+                    Edit Minutes
+                  </Button>
+                </CardFooter>
+              )}
+            </Card>
+          )}
+
+          {meeting?.aiSummary && (
+            <Card>
+              <CardHeader>
+                <CardTitle>AI Summary</CardTitle>
+                <CardDescription>Automatically generated summary of the meeting</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="prose max-w-none">
+                  <div dangerouslySetInnerHTML={{ __html: meeting.aiSummary.replace(/\n/g, '<br/>') }} />
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
-        <TabsContent value="actions">
-          <div>Actions Content</div>
+        <TabsContent value="actions" className="space-y-4">
+          <ActionItemsList
+            actionItems={dashboard?.actionItems || []}
+            onExtractItems={async () => await extractActionItemsMutation.mutateAsync()}
+            isLoading={extractActionItemsMutation.isPending}
+          />
         </TabsContent>
       </Tabs>
     </div>
