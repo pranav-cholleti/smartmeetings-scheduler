@@ -73,8 +73,8 @@ const App = () => (
               } 
             />
             
-            {/* Redirect from root to dashboard if authenticated */}
-            <Route path="/" element={<Navigate to="/dashboard" replace />} />
+            {/* Root redirect to login */}
+            <Route path="/" element={<Navigate to="/login" replace />} />
             
             {/* 404 Route */}
             <Route 

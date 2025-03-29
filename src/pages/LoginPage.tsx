@@ -28,7 +28,7 @@ type LoginFormValues = z.infer<typeof loginSchema>;
 
 export default function LoginPage() {
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const { login, devModeAuth } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
 
   const form = useForm<LoginFormValues>({
@@ -51,6 +51,12 @@ export default function LoginPage() {
       setIsLoading(false);
     }
   }
+
+  const handlePreviewApp = () => {
+    devModeAuth();
+    toast.success("Preview mode activated!");
+    navigate("/dashboard");
+  };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4">
@@ -122,6 +128,26 @@ export default function LoginPage() {
                 </Button>
               </form>
             </Form>
+            
+            <div className="mt-6">
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <span className="w-full border-t border-gray-300" />
+                </div>
+                <div className="relative flex justify-center text-sm">
+                  <span className="px-2 bg-white text-gray-500">
+                    Or continue with
+                  </span>
+                </div>
+              </div>
+              <Button
+                onClick={handlePreviewApp}
+                variant="outline"
+                className="w-full mt-4"
+              >
+                Preview App
+              </Button>
+            </div>
           </CardContent>
           <CardFooter className="flex justify-center">
             <p className="text-sm text-gray-600">

@@ -11,6 +11,7 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<void>;
   register: (data: any) => Promise<void>;
   logout: () => void;
+  devModeAuth: () => void; // New function for dev mode authentication
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -70,6 +71,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setIsAuthenticated(false);
   };
 
+  // Development mode authentication function
+  const devModeAuth = () => {
+    // Create a mock user
+    const mockUser: User = {
+      userId: 'dev-user-id',
+      name: 'Dev User',
+      email: 'dev@example.com',
+      organisation: 'Development Org',
+      employmentPosition: 'Developer'
+    };
+    
+    // Store mock user and token
+    localStorage.setItem('user', JSON.stringify(mockUser));
+    localStorage.setItem('token', 'dev-mode-token');
+    
+    setUser(mockUser);
+    setIsAuthenticated(true);
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -80,7 +100,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, isAuthenticated, loading, login, register, logout }}
+      value={{ user, isAuthenticated, loading, login, register, logout, devModeAuth }}
     >
       {children}
     </AuthContext.Provider>
