@@ -1,192 +1,141 @@
-
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { toast } from "sonner";
+import { z } from "zod";
 import { format } from "date-fns";
-import { CalendarIcon, Search, X } from "lucide-react";
-import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import {
-  Form,
-  FormControl,
-  FormDescription,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import { Calendar } from "@/components/ui/calendar";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Spinner } from "@/components/ui/spinner";
-import { Badge } from "@/components/ui/badge";
+import { CalendarIcon, Plus, X } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { meetingService } from "@/services/meetingService";
-import { taskService } from "@/services/taskService";
+import { Button } from "@/components/ui/button";
+import { Calendar } from "@/components/ui/calendar";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
+import { Avatar } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
 
+// Form schema
 const formSchema = z.object({
   name: z.string().min(3, "Meeting name must be at least 3 characters"),
-  dateTime: z.date({
-    required_error: "Date and time are required",
-  }),
-  isOnline: z.boolean().default(false),
-  meetingLink: z.string().optional()
-    .refine(
-      (val) => !val || /^https?:\/\//i.test(val),
-      "Meeting link must start with http:// or https://"
-    ),
+  dateTime: z.date(),
+  attendees: z.array(z.string()),
+  isOnline: z.boolean().default(true),
+  meetingLink: z.string().optional(),
   additionalComments: z.string().optional(),
 });
 
-type FormValues = z.infer<typeof formSchema>;
-
+// Meeting creation form component
 export default function CreateMeetingPage() {
   const navigate = useNavigate();
-  const [loading, setLoading] = useState(false);
+  const [selectedUsers, setSelectedUsers] = useState<{ id: string; name: string; email: string }[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
-  const [searchResults, setSearchResults] = useState<{userId: string, name: string, email: string}[]>([]);
-  const [searching, setSearching] = useState(false);
-  const [selectedAttendees, setSelectedAttendees] = useState<{userId: string, name: string, email: string}[]>([]);
-
-  const form = useForm<FormValues>({
+  
+  // Form setup
+  const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       name: "",
-      isOnline: false,
+      dateTime: new Date(),
+      attendees: [],
+      isOnline: true,
       meetingLink: "",
       additionalComments: "",
     },
   });
 
-  const watchIsOnline = form.watch("isOnline");
-  
-  // Validate meetingLink when isOnline changes
-  useEffect(() => {
-    if (watchIsOnline) {
-      form.trigger("meetingLink");
-    }
-  }, [watchIsOnline, form]);
-
-  const searchUsers = async (query: string) => {
-    if (!query.trim()) {
-      setSearchResults([]);
-      return;
-    }
-    
-    setSearching(true);
-    try {
-      const users = await taskService.getOrganisationUsers(query);
-      // Filter out already selected attendees
-      const filteredUsers = users.filter(
-        (user) => !selectedAttendees.some((selected) => selected.userId === user.userId)
-      );
-      setSearchResults(filteredUsers);
-    } catch (error) {
-      console.error("Error searching users:", error);
-    } finally {
-      setSearching(false);
-    }
-  };
-
-  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const query = e.target.value;
-    setSearchQuery(query);
-    searchUsers(query);
-  };
-
-  const addAttendee = (attendee: {userId: string, name: string, email: string}) => {
-    setSelectedAttendees([...selectedAttendees, attendee]);
-    setSearchQuery("");
-    setSearchResults([]);
-  };
-
-  const removeAttendee = (userId: string) => {
-    setSelectedAttendees(selectedAttendees.filter((a) => a.userId !== userId));
-  };
-
-  async function onSubmit(data: FormValues) {
-    // Validate meeting link for online meetings
-    if (data.isOnline && (!data.meetingLink || !data.meetingLink.trim())) {
-      toast.error("Meeting link is required for online meetings");
-      return;
-    }
-
-    setLoading(true);
+  // Handle form submission
+  const onSubmit = async (values: z.infer<typeof formSchema>) => {
     try {
       const meetingData = {
-        name: data.name,
-        dateTime: data.dateTime.toISOString(),
-        attendees: selectedAttendees.map(a => a.userId),
-        isOnline: data.isOnline,
-        meetingLink: data.isOnline ? data.meetingLink : undefined,
-        additionalComments: data.additionalComments?.trim() || undefined,
+        ...values,
+        dateTime: format(values.dateTime, "yyyy-MM-dd'T'HH:mm:ss"),
+        attendees: selectedUsers.map(user => user.id),
       };
-
-      const response = await meetingService.createMeeting(meetingData);
-      toast.success("Meeting created successfully!");
-      navigate(`/meetings/${response._id}`);
+      
+      const createdMeeting = await meetingService.createMeeting(meetingData);
+      toast.success("Meeting created successfully");
+      navigate(`/meetings/${createdMeeting.meetingId}`);
     } catch (error) {
+      toast.error("Failed to create meeting");
       console.error("Error creating meeting:", error);
-    } finally {
-      setLoading(false);
     }
-  }
+  };
+
+  // Fetch organization users
+  const { data: users, isLoading: loadingUsers } = useQuery({
+    queryKey: ["organization-users", searchQuery],
+    queryFn: () => meetingService.getOrganizationUsers(searchQuery),
+  });
+
+  // Handle adding a user as attendee
+  const handleAddUser = (user: { id: string; name: string; email: string }) => {
+    if (!selectedUsers.some(u => u.id === user.id)) {
+      setSelectedUsers([...selectedUsers, user]);
+      form.setValue('attendees', [...form.getValues('attendees'), user.id]);
+    }
+  };
+
+  // Handle removing a user from attendees
+  const handleRemoveUser = (userId: string) => {
+    setSelectedUsers(selectedUsers.filter(user => user.id !== userId));
+    form.setValue('attendees', form.getValues('attendees').filter(id => id !== userId));
+  };
+
+  // Filter users for dropdown
+  const filteredUsers = users?.filter(user => 
+    !selectedUsers.some(selectedUser => selectedUser.id === user.id) &&
+    (user.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+     user.email.toLowerCase().includes(searchQuery.toLowerCase()))
+  );
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold">Create Meeting</h1>
-        <p className="text-muted-foreground mt-1">
-          Set up a new meeting with your team
-        </p>
-      </div>
-
-      <Card className="p-6">
+    <Card>
+      <CardHeader>
+        <CardTitle>Create Meeting</CardTitle>
+        <CardDescription>Schedule a new meeting with your team</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
             <FormField
               control={form.control}
               name="name"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Meeting Name*</FormLabel>
+                  <FormLabel>Meeting Name</FormLabel>
                   <FormControl>
-                    <Input placeholder="Quarterly Review" {...field} />
+                    <Input placeholder="Enter meeting name" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
             />
-
             <FormField
               control={form.control}
               name="dateTime"
               render={({ field }) => (
                 <FormItem className="flex flex-col">
-                  <FormLabel>Date and Time*</FormLabel>
+                  <FormLabel>Date and Time</FormLabel>
                   <Popover>
                     <PopoverTrigger asChild>
                       <FormControl>
                         <Button
                           variant={"outline"}
                           className={cn(
-                            "w-full pl-3 text-left font-normal",
+                            "w-[240px] pl-3 text-left font-normal",
                             !field.value && "text-muted-foreground"
                           )}
                         >
                           {field.value ? (
-                            format(field.value, "PPP p")
+                            format(field.value, "PPP h:mm a")
                           ) : (
-                            <span>Pick a date</span>
+                            <span>Pick a date and time</span>
                           )}
                           <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
                         </Button>
@@ -197,146 +146,116 @@ export default function CreateMeetingPage() {
                         mode="single"
                         selected={field.value}
                         onSelect={field.onChange}
+                        disabled={(date) =>
+                          date < new Date()
+                        }
                         initialFocus
-                        className="p-3 pointer-events-auto"
                       />
-                      {field.value && (
-                        <div className="p-3 border-t">
-                          <Input
-                            type="time"
-                            onChange={(e) => {
-                              const [hours, minutes] = e.target.value.split(':');
-                              const newDate = new Date(field.value);
-                              newDate.setHours(parseInt(hours), parseInt(minutes));
-                              field.onChange(newDate);
-                            }}
-                            defaultValue={
-                              field.value 
-                              ? `${String(field.value.getHours()).padStart(2, '0')}:${String(field.value.getMinutes()).padStart(2, '0')}`
-                              : "12:00"
-                            }
-                          />
-                        </div>
-                      )}
                     </PopoverContent>
                   </Popover>
+                  <FormDescription>
+                    Select the date and time for the meeting.
+                  </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
             />
-
-            <div className="space-y-3">
+            <div className="space-y-2">
               <FormLabel>Attendees</FormLabel>
-              
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                <Input
-                  placeholder="Search for users in your organisation"
-                  className="pl-10"
-                  value={searchQuery}
-                  onChange={handleSearchChange}
-                />
-              </div>
-              
-              {/* Selected attendees */}
-              {selectedAttendees.length > 0 && (
-                <div className="flex flex-wrap gap-2 mt-3">
-                  {selectedAttendees.map((attendee) => (
-                    <Badge key={attendee.userId} variant="secondary" className="flex items-center gap-1">
-                      {attendee.name}
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="h-4 w-4 ml-1 p-0 hover:bg-transparent"
-                        onClick={() => removeAttendee(attendee.userId)}
-                      >
-                        <X className="h-3 w-3" />
-                      </Button>
-                    </Badge>
-                  ))}
-                </div>
-              )}
-              
-              {/* Search results */}
-              {searching ? (
-                <div className="flex justify-center py-2">
-                  <Spinner size="sm" />
-                </div>
-              ) : searchResults.length > 0 ? (
-                <Card className="mt-2 p-2 max-h-60 overflow-y-auto">
-                  <ul>
-                    {searchResults.map((user) => (
-                      <li key={user.userId}>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          className="flex items-start justify-start w-full text-left p-2"
-                          onClick={() => addAttendee(user)}
-                        >
-                          <div>
-                            <p>{user.name}</p>
-                            <p className="text-xs text-muted-foreground">{user.email}</p>
-                          </div>
+              <Card className="border-none shadow-sm">
+                <CardContent>
+                  <div className="flex flex-wrap gap-2">
+                    {selectedUsers.map(user => (
+                      <Badge key={user.id} variant="secondary" className="gap-x-2 items-center">
+                        <Avatar className="h-5 w-5">
+                          <AvatarFallback>{user.name.charAt(0).toUpperCase()}</AvatarFallback>
+                        </Avatar>
+                        {user.name}
+                        <Button variant="ghost" size="icon" onClick={() => handleRemoveUser(user.id)}>
+                          <X className="h-4 w-4" />
                         </Button>
-                      </li>
+                      </Badge>
                     ))}
-                  </ul>
-                </Card>
-              ) : searchQuery.length > 0 && (
-                <p className="text-sm text-muted-foreground mt-2">No users found</p>
-              )}
-              
-              <p className="text-xs text-muted-foreground">
-                {selectedAttendees.length === 0 
-                  ? "No attendees selected yet" 
-                  : `${selectedAttendees.length} attendee${selectedAttendees.length > 1 ? 's' : ''} selected`}
-              </p>
+                  </div>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" className="mt-4">
+                        <Plus className="mr-2 h-4 w-4" />
+                        Add Attendees
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[300px]">
+                      <div className="space-y-2">
+                        <Input
+                          type="search"
+                          placeholder="Search users..."
+                          value={searchQuery}
+                          onChange={(e) => setSearchQuery(e.target.value)}
+                        />
+                        {loadingUsers ? (
+                          <p>Loading users...</p>
+                        ) : filteredUsers && filteredUsers.length > 0 ? (
+                          filteredUsers.map(user => (
+                            <Button
+                              key={user.id}
+                              variant="ghost"
+                              className="w-full justify-start"
+                              onClick={() => handleAddUser(user)}
+                            >
+                              <Avatar className="mr-2 h-5 w-5">
+                                <AvatarFallback>{user.name.charAt(0).toUpperCase()}</AvatarFallback>
+                              </Avatar>
+                              {user.name} ({user.email})
+                            </Button>
+                          ))
+                        ) : (
+                          <p>No users found.</p>
+                        )}
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                </CardContent>
+              </Card>
+              <FormDescription>
+                Add people to the meeting.
+              </FormDescription>
+              <FormMessage />
             </div>
-
             <FormField
               control={form.control}
               name="isOnline"
               render={({ field }) => (
-                <FormItem className="flex flex-row items-center space-x-3 space-y-0">
+                <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                  <div className="space-y-0.5">
+                    <FormLabel className="text-base">Online Meeting</FormLabel>
+                    <FormDescription>
+                      Enable if this meeting will be conducted online.
+                    </FormDescription>
+                  </div>
                   <FormControl>
-                    <Checkbox
+                    <Switch
                       checked={field.value}
                       onCheckedChange={field.onChange}
                     />
                   </FormControl>
-                  <div className="space-y-1 leading-none">
-                    <FormLabel>Online Meeting</FormLabel>
-                    <FormDescription>
-                      Check this if the meeting will be conducted online
-                    </FormDescription>
-                  </div>
                 </FormItem>
               )}
             />
-
-            {watchIsOnline && (
+            {form.getValues("isOnline") && (
               <FormField
                 control={form.control}
                 name="meetingLink"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Meeting Link*</FormLabel>
+                    <FormLabel>Meeting Link</FormLabel>
                     <FormControl>
-                      <Input 
-                        placeholder="https://meet.google.com/..." 
-                        {...field} 
-                      />
+                      <Input placeholder="Enter meeting link" {...field} />
                     </FormControl>
-                    <FormDescription>
-                      URL for the online meeting (required for online meetings)
-                    </FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
               />
             )}
-
             <FormField
               control={form.control}
               name="additionalComments"
@@ -345,9 +264,8 @@ export default function CreateMeetingPage() {
                   <FormLabel>Additional Comments</FormLabel>
                   <FormControl>
                     <Textarea
-                      placeholder="Add any additional information about this meeting..."
+                      placeholder="Add any additional comments here."
                       className="resize-none"
-                      rows={4}
                       {...field}
                     />
                   </FormControl>
@@ -355,24 +273,12 @@ export default function CreateMeetingPage() {
                 </FormItem>
               )}
             />
-
-            <div className="flex items-center gap-4">
-              <Button type="submit" disabled={loading} className="flex-1">
-                {loading && <Spinner className="mr-2" size="sm" />}
-                Create Meeting
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => navigate(-1)}
-                className="flex-1"
-              >
-                Cancel
-              </Button>
-            </div>
+            <CardFooter>
+              <Button type="submit">Create Meeting</Button>
+            </CardFooter>
           </form>
         </Form>
-      </Card>
-    </div>
+      </CardContent>
+    </Card>
   );
 }

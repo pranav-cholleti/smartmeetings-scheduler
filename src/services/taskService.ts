@@ -86,6 +86,23 @@ export const taskService = {
       `/tasks/${taskId}`
     );
     return response.data.data;
+  },
+
+  // Get task statistics
+  async getTaskStatistics(): Promise<{
+    tasksByStatus: { name: string; value: number }[];
+    tasksByPriority: { name: string; value: number }[];
+    completionRate: number;
+  }> {
+    const response = await api.get<{ 
+      success: boolean; 
+      data: {
+        tasksByStatus: { name: string; value: number }[];
+        tasksByPriority: { name: string; value: number }[];
+        completionRate: number;
+      } 
+    }>("/tasks/statistics");
+    return response.data.data;
   }
 };
 

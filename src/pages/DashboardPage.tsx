@@ -1,14 +1,15 @@
-
 import { useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Calendar, CheckCircle2, Clock, Plus, UserCheck } from "lucide-react";
+import { Calendar, CheckCircle2, Clock, Plus, UserCheck, ArrowUp, ArrowDown } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useQuery } from "@tanstack/react-query";
 import { meetingService } from "@/services/meetingService";
 import { taskService } from "@/services/taskService";
+import { Progress } from "@/components/ui/progress";
+import { PieChart, Pie, Cell } from "recharts";
 
 export default function DashboardPage() {
   const { user } = useAuth();
@@ -44,6 +45,40 @@ export default function DashboardPage() {
       default: return 'bg-gray-200';
     }
   };
+
+  // Calculate task progress stats
+  const taskStats = React.useMemo(() => {
+    if (!assignedTasks?.tasks) return { completed: 0, total: 0, percentage: 0 };
+    
+    const total = assignedTasks.tasks.length;
+    const completed = assignedTasks.tasks.filter(task => task.progress === 'Completed').length;
+    const percentage = total > 0 ? Math.floor((completed / total) * 100) : 0;
+    
+    return { completed, total, percentage };
+  }, [assignedTasks]);
+
+  // Generate task status data for pie chart
+  const taskStatusData = React.useMemo(() => {
+    if (!assignedTasks?.tasks) return [];
+    
+    const statusCounts: Record<string, number> = {
+      'Not Started': 0,
+      'In Progress': 0,
+      'Completed': 0,
+      'Blocked': 0
+    };
+    
+    assignedTasks.tasks.forEach(task => {
+      if (task.progress in statusCounts) {
+        statusCounts[task.progress]++;
+      }
+    });
+    
+    return Object.entries(statusCounts).map(([name, value]) => ({ name, value }));
+  }, [assignedTasks]);
+
+  // Colors for pie chart
+  const STATUS_COLORS = ['#94a3b8', '#3b82f6', '#22c55e', '#ef4444'];
 
   return (
     <div className="space-y-6">
@@ -147,8 +182,64 @@ export default function DashboardPage() {
         </Card>
       </div>
 
+      <Card className="col-span-1">
+        <CardHeader>
+          <CardTitle className="text-xl">Task Progress</CardTitle>
+          <CardDescription>Your progress on assigned tasks</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {loadingTasks ? (
+            <div className="space-y-4">
+              <Skeleton className="h-8 w-full" />
+              <Skeleton className="h-40 w-full" />
+            </div>
+          ) : assignedTasks?.tasks && assignedTasks.tasks.length > 0 ? (
+            <div className="space-y-6">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">Overall Completion</span>
+                  <span className="font-medium">{taskStats.percentage}%</span>
+                </div>
+                <Progress value={taskStats.percentage} className="h-2" />
+                <p className="text-xs text-muted-foreground mt-2">
+                  {taskStats.completed} out of {taskStats.total} tasks completed
+                </p>
+              </div>
+              
+              <div className="pt-4">
+                <h4 className="text-sm font-medium mb-2">Tasks by Status</h4>
+                <div className="h-[180px] flex items-center justify-center">
+                  <PieChart width={200} height={180}>
+                    <Pie
+                      data={taskStatusData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={30}
+                      outerRadius={60}
+                      paddingAngle={1}
+                      dataKey="value"
+                      label={({ name, percent }) => 
+                        percent > 0.05 ? `${name}: ${(percent * 100).toFixed(0)}%` : ''
+                      }
+                    >
+                      {taskStatusData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={STATUS_COLORS[index % STATUS_COLORS.length]} />
+                      ))}
+                    </Pie>
+                  </PieChart>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="text-center py-6 text-muted-foreground">
+              <Clock className="h-12 w-12 mx-auto mb-2 opacity-20" />
+              <p>No tasks assigned to you</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Recent Meetings */}
         <Card className="col-span-1">
           <CardHeader>
             <CardTitle className="text-xl">Recent Meetings</CardTitle>
@@ -199,7 +290,6 @@ export default function DashboardPage() {
           </CardFooter>
         </Card>
 
-        {/* My Tasks */}
         <Card className="col-span-1">
           <CardHeader>
             <CardTitle className="text-xl">My Tasks</CardTitle>
