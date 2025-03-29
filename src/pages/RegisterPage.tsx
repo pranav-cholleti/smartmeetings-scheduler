@@ -49,7 +49,7 @@ export default function RegisterPage() {
       password: "",
       organisation: "",
       employmentPosition: "",
-      age: "",
+      age: undefined,
       mobile: "",
     },
   });

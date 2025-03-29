@@ -1,5 +1,5 @@
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
@@ -70,7 +70,7 @@ export default function CreateMeetingPage() {
   const watchIsOnline = form.watch("isOnline");
   
   // Validate meetingLink when isOnline changes
-  React.useEffect(() => {
+  useEffect(() => {
     if (watchIsOnline) {
       form.trigger("meetingLink");
     }
