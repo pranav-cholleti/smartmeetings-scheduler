@@ -1,5 +1,4 @@
-
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { CalendarIcon, ChevronLeft, Clock, Download, User } from "lucide-react";
@@ -29,27 +28,23 @@ export default function MeetingDetailsPage() {
   const [dashboardData, setDashboardData] = useState<any>(null);
   const [isEditingMinutes, setIsEditingMinutes] = useState(false);
 
-  // Fetch meeting details
   const { data: meeting, isLoading, error, refetch } = useQuery({
     queryKey: ["meeting", meetingId],
     queryFn: () => meetingService.getMeetingDetails(meetingId!),
   });
 
-  // Fetch dashboard data - Fix: Removing onSuccess and using useEffect instead
   const { data: dashboard, isLoading: loadingDashboard } = useQuery({
     queryKey: ["meeting-dashboard", meetingId],
     queryFn: () => meetingService.getDashboard(meetingId!),
     enabled: !!meetingId && currentTab === "dashboard",
   });
 
-  // Update dashboard data when it changes
-  React.useEffect(() => {
+  useEffect(() => {
     if (dashboard) {
       setDashboardData(dashboard);
     }
   }, [dashboard]);
 
-  // Mutation for updating minutes
   const updateMinutesMutation = useMutation({
     mutationFn: (content: string) => meetingService.updateMinutes(meetingId!, content),
     onSuccess: () => {
@@ -62,12 +57,10 @@ export default function MeetingDetailsPage() {
     }
   });
 
-  // Mutation for extracting action items
   const extractActionItemsMutation = useMutation({
     mutationFn: () => meetingService.extractActionItems(meetingId!),
     onSuccess: () => {
       toast.success("Action items extracted successfully");
-      // Refetch dashboard data to get new action items
       refetch();
     },
     onError: () => {
@@ -75,7 +68,6 @@ export default function MeetingDetailsPage() {
     }
   });
 
-  // Handle download minutes
   const handleDownloadMinutes = async () => {
     try {
       await meetingService.generateMinutesPdf(meetingId!);
@@ -86,17 +78,14 @@ export default function MeetingDetailsPage() {
     }
   };
 
-  // Handle edit minutes
   const handleEditMinutes = () => {
     setIsEditingMinutes(true);
   };
 
-  // Handle save minutes
   const handleSaveMinutes = async (content: string) => {
     await updateMinutesMutation.mutateAsync(content);
   };
 
-  // Format date for display
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     return format(date, "MMM d, yyyy h:mm a");
@@ -127,7 +116,6 @@ export default function MeetingDetailsPage() {
     );
   }
 
-  // Generate dashboard data
   const stats = dashboardData ? dashboardData : {
     taskCompletion: {
       completed: 0,
