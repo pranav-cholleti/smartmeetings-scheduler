@@ -4,9 +4,10 @@ import { format } from 'date-fns';
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
-import { Check, Clock, User } from 'lucide-react';
+import { Check, Clock, User, Loader } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ActionItemSuggestion } from '@/types';
+import { Spinner } from "@/components/ui/spinner";
 
 interface ActionItemsListProps {
   actionItems: ActionItemSuggestion[];
@@ -33,13 +34,19 @@ export function ActionItemsList({ actionItems, onExtractItems, isLoading = false
         <CardDescription>Tasks and action items from this meeting</CardDescription>
       </CardHeader>
       <CardContent>
-        {actionItems && actionItems.length > 0 ? (
+        {isLoading ? (
+          <div className="flex flex-col items-center justify-center py-8">
+            <Spinner className="h-8 w-8 mb-4" />
+            <p className="text-muted-foreground">Extracting action items from meeting minutes...</p>
+            <p className="text-xs text-muted-foreground mt-2">This may take a moment</p>
+          </div>
+        ) : actionItems && actionItems.length > 0 ? (
           <div className="space-y-4">
             {actionItems.map((item, index) => {
               const priorityInfo = getPriorityDetails(item.priority);
               
               return (
-                <div key={index} className="border rounded-md p-4">
+                <div key={index} className="border rounded-md p-4 hover:border-primary/50 transition-colors">
                   <div className="flex items-start justify-between gap-4">
                     <div>
                       <h3 className="font-medium">{item.taskName}</h3>
@@ -86,8 +93,10 @@ export function ActionItemsList({ actionItems, onExtractItems, isLoading = false
                 variant="outline" 
                 onClick={onExtractItems}
                 disabled={isLoading}
+                className="flex items-center gap-2"
               >
-                {isLoading ? "Processing..." : "Extract Action Items from Minutes"}
+                {isLoading ? <Spinner className="h-4 w-4" /> : null}
+                Extract Action Items from Minutes
               </Button>
             )}
           </div>

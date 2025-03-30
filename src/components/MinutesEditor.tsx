@@ -25,6 +25,21 @@ export function MinutesEditor({ initialContent, onSave, onCancel }: MinutesEdito
     }
   };
 
+  // Convert line breaks to HTML for preview
+  const formatContentForPreview = (text: string) => {
+    if (!text) return '';
+    
+    // Basic markdown-like formatting
+    return text
+      .replace(/\n\s*\n/g, '</p><p>') // Convert double line breaks to paragraphs
+      .replace(/\n/g, '<br/>') // Convert single line breaks to <br/>
+      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') // Bold text **bold**
+      .replace(/\*(.*?)\*/g, '<em>$1</em>') // Italic text *italic*
+      .replace(/^#{3}\s+(.*)$/gm, '<h3>$1</h3>') // H3 headlines
+      .replace(/^#{2}\s+(.*)$/gm, '<h2>$1</h2>') // H2 headlines
+      .replace(/^#{1}\s+(.*)$/gm, '<h1>$1</h1>'); // H1 headlines
+  };
+
   return (
     <Card>
       <CardHeader>
@@ -53,7 +68,7 @@ export function MinutesEditor({ initialContent, onSave, onCancel }: MinutesEdito
 
         {isPreview ? (
           <div className="prose max-w-none border rounded-md p-4 min-h-[300px] bg-muted/20">
-            <div dangerouslySetInnerHTML={{ __html: content.replace(/\n/g, '<br/>') }} />
+            <div dangerouslySetInnerHTML={{ __html: formatContentForPreview(content) }} />
           </div>
         ) : (
           <Textarea

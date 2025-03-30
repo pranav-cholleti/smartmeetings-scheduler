@@ -35,15 +35,19 @@ export default function MeetingDetailsPage() {
     queryFn: () => meetingService.getMeetingDetails(meetingId!),
   });
 
-  // Fetch dashboard data
+  // Fetch dashboard data - Fix: Removing onSuccess and using useEffect instead
   const { data: dashboard, isLoading: loadingDashboard } = useQuery({
     queryKey: ["meeting-dashboard", meetingId],
     queryFn: () => meetingService.getDashboard(meetingId!),
     enabled: !!meetingId && currentTab === "dashboard",
-    onSuccess: (data) => {
-      if (data) setDashboardData(data);
-    }
   });
+
+  // Update dashboard data when it changes
+  React.useEffect(() => {
+    if (dashboard) {
+      setDashboardData(dashboard);
+    }
+  }, [dashboard]);
 
   // Mutation for updating minutes
   const updateMinutesMutation = useMutation({
@@ -64,7 +68,7 @@ export default function MeetingDetailsPage() {
     onSuccess: () => {
       toast.success("Action items extracted successfully");
       // Refetch dashboard data to get new action items
-      dashboard.refetch?.();
+      refetch();
     },
     onError: () => {
       toast.error("Failed to extract action items");
