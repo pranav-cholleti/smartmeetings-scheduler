@@ -1,6 +1,6 @@
 
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { taskService } from "@/services/taskService";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,18 +8,17 @@ import {
   Tabs, TabsContent, TabsList, TabsTrigger 
 } from "@/components/ui/tabs";
 import { 
-  CheckCircle2, ChevronLeft, ChevronRight, Clock, Search, 
-  SortAsc, X
+  CheckCircle2, ChevronLeft, ChevronRight, Search, 
+  SortAsc
 } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { 
   Select, SelectContent, SelectItem, 
   SelectTrigger, SelectValue 
 } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
-import { Task } from "@/types";
-import { Link } from "react-router-dom";
+import { toast } from "sonner";
+import TaskCard from "@/components/TaskCard";
 
 export default function TasksPage() {
   const [activeTab, setActiveTab] = useState<"assigned" | "scheduled">("assigned");
@@ -84,6 +83,43 @@ export default function TasksPage() {
     enabled: activeTab === "scheduled",
   });
 
+  // Update task progress mutation
+  const updateTaskMutation = useMutation({
+    mutationFn: ({ taskId, progress }: { taskId: string, progress: "Not Started" | "In Progress" | "Completed" | "Blocked" }) => 
+      taskService.updateTaskProgress(taskId, progress),
+    onSuccess: () => {
+      toast.success("Task progress updated successfully");
+      // Refetch tasks based on active tab
+      if (activeTab === "assigned") {
+        refetchAssigned();
+      } else {
+        refetchScheduled();
+      }
+    },
+    onError: (error) => {
+      toast.error("Failed to update task progress");
+      console.error("Error updating task progress:", error);
+    }
+  });
+
+  // Delete task mutation
+  const deleteTaskMutation = useMutation({
+    mutationFn: (taskId: string) => taskService.deleteTask(taskId),
+    onSuccess: () => {
+      toast.success("Task deleted successfully");
+      // Refetch tasks based on active tab
+      if (activeTab === "assigned") {
+        refetchAssigned();
+      } else {
+        refetchScheduled();
+      }
+    },
+    onError: (error) => {
+      toast.error("Failed to delete task");
+      console.error("Error deleting task:", error);
+    }
+  });
+
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     if (activeTab === "assigned") {
@@ -108,6 +144,14 @@ export default function TasksPage() {
     }
   };
 
+  const handleUpdateProgress = (taskId: string, progress: "Not Started" | "In Progress" | "Completed" | "Blocked") => {
+    updateTaskMutation.mutate({ taskId, progress });
+  };
+
+  const handleDeleteTask = (taskId: string) => {
+    deleteTaskMutation.mutate(taskId);
+  };
+
   const getTaskData = () => {
     return activeTab === "assigned" ? assignedTasks : scheduledTasks;
   };
@@ -117,90 +161,6 @@ export default function TasksPage() {
   const totalItems = taskData?.totalTasks || 0;
   const totalPages = taskData?.totalPages || 1;
   const tasks = taskData?.tasks || [];
-
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return new Intl.DateTimeFormat('en-US', {
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric',
-    }).format(date);
-  };
-
-  const getProgressBadgeStyle = (progress: string) => {
-    switch (progress) {
-      case 'Not Started':
-        return "bg-gray-100 text-gray-800 border-gray-200";
-      case 'In Progress':
-        return "bg-blue-100 text-blue-800 border-blue-200";
-      case 'Completed':
-        return "bg-green-100 text-green-800 border-green-200";
-      case 'Blocked':
-        return "bg-red-100 text-red-800 border-red-200";
-      default:
-        return "bg-gray-100 text-gray-800 border-gray-200";
-    }
-  };
-
-  const getPriorityBadge = (priority: number) => {
-    if (priority <= 3) return <Badge className="bg-red-500">High</Badge>;
-    if (priority <= 7) return <Badge className="bg-amber-500">Medium</Badge>;
-    return <Badge className="bg-green-500">Low</Badge>;
-  };
-
-  const renderTaskCard = (task: Task) => (
-    <Card key={task.taskId} className="mb-4">
-      <CardContent className="p-4">
-        <div className="flex flex-col md:flex-row justify-between gap-4">
-          <div className="space-y-2">
-            <div className="flex items-center gap-2">
-              <h3 className="text-lg font-medium">{task.taskName}</h3>
-              {getPriorityBadge(task.priority)}
-            </div>
-            <div className="text-sm text-muted-foreground">
-              {task.meeting ? (
-                <Link 
-                  to={`/meetings/${task.meeting.meetingId}`} 
-                  className="hover:underline flex items-center gap-1"
-                >
-                  <span>From: {task.meeting.name}</span>
-                </Link>
-              ) : (
-                <span>No meeting associated</span>
-              )}
-            </div>
-            <div className="flex flex-wrap gap-2 items-center text-sm">
-              <span className="flex items-center gap-1">
-                <Clock className="h-3 w-3" />
-                Due: {formatDate(task.deadline)}
-              </span>
-              <Badge variant="outline" className={getProgressBadgeStyle(task.progress)}>
-                {task.progress}
-              </Badge>
-            </div>
-          </div>
-
-          <div className="flex flex-col gap-2">
-            <div className="flex flex-wrap gap-1">
-              {task.assignees.map((assignee) => (
-                <Badge key={assignee._id} variant="secondary" className="text-xs">
-                  {assignee.name}
-                </Badge>
-              ))}
-            </div>
-            <div className="flex gap-2 mt-auto justify-end">
-              <Button size="sm" variant="outline">
-                Update Progress
-              </Button>
-              <Button size="sm" variant="ghost" className="text-red-500">
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
 
   return (
     <div className="space-y-6">
@@ -303,7 +263,18 @@ export default function TasksPage() {
             </Card>
           ) : (
             <div>
-              {tasks.map((task) => renderTaskCard(task))}
+              {tasks.map((task) => (
+                <TaskCard
+                  key={task.taskId}
+                  task={task}
+                  onUpdateProgress={handleUpdateProgress}
+                  onDelete={handleDeleteTask}
+                  isUpdating={updateTaskMutation.isPending}
+                  isDeleting={deleteTaskMutation.isPending}
+                  updatingTaskId={updateTaskMutation.variables?.taskId}
+                  deletingTaskId={deleteTaskMutation.variables as string | undefined}
+                />
+              ))}
             </div>
           )}
         </TabsContent>
@@ -329,7 +300,18 @@ export default function TasksPage() {
             </Card>
           ) : (
             <div>
-              {tasks.map((task) => renderTaskCard(task))}
+              {tasks.map((task) => (
+                <TaskCard
+                  key={task.taskId}
+                  task={task}
+                  onUpdateProgress={handleUpdateProgress}
+                  onDelete={handleDeleteTask}
+                  isUpdating={updateTaskMutation.isPending}
+                  isDeleting={deleteTaskMutation.isPending}
+                  updatingTaskId={updateTaskMutation.variables?.taskId}
+                  deletingTaskId={deleteTaskMutation.variables as string | undefined}
+                />
+              ))}
             </div>
           )}
         </TabsContent>
