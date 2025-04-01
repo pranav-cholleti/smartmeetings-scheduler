@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 
-type ProgressStatus = "Not Started" | "In Progress" | "Completed" | "Blocked";
+export type ProgressStatus = "Not Started" | "In Progress" | "Completed" | "Blocked";
 
 interface TaskProgressDialogProps {
   isOpen: boolean;
@@ -46,9 +46,15 @@ export default function TaskProgressDialog({
       onUpdate(selectedProgress);
     }
   };
+  
+  const handleDialogClose = () => {
+    // Reset the selected progress when dialog closes
+    setSelectedProgress(currentProgress);
+    onClose();
+  };
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
+    <Dialog open={isOpen} onOpenChange={handleDialogClose}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Update Task Progress</DialogTitle>
@@ -75,7 +81,7 @@ export default function TaskProgressDialog({
         </div>
 
         <DialogFooter className="flex justify-between sm:justify-between">
-          <Button variant="outline" onClick={onClose} disabled={isLoading}>
+          <Button variant="outline" onClick={handleDialogClose} disabled={isLoading}>
             Cancel
           </Button>
           <Button onClick={handleSubmit} disabled={!selectedProgress || isLoading}>

@@ -1,7 +1,8 @@
+
 import { useState, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { CalendarIcon, ChevronLeft, Clock, Download, User } from "lucide-react";
+import { CalendarIcon, ChevronLeft, Clock, Download, User, Edit, Upload } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 
@@ -21,12 +22,16 @@ import { Textarea } from "@/components/ui/textarea";
 import { MinutesEditor } from "@/components/MinutesEditor";
 import { ActionItemsList } from "@/components/ActionItemsList";
 import { TaskProgressChart } from "@/components/TaskProgressChart";
+import TaskProgressDialog from "@/components/TaskProgressDialog";
 
 export default function MeetingDetailsPage() {
   const { meetingId } = useParams<{ meetingId: string }>();
   const [currentTab, setCurrentTab] = useState("overview");
   const [dashboardData, setDashboardData] = useState<any>(null);
   const [isEditingMinutes, setIsEditingMinutes] = useState(false);
+  const [isEditingMeeting, setIsEditingMeeting] = useState(false);
+  const [isUploadingMinutes, setIsUploadingMinutes] = useState(false);
+  const [minutesFile, setMinutesFile] = useState<File | null>(null);
 
   const { data: meeting, isLoading, error, refetch } = useQuery({
     queryKey: ["meeting", meetingId],
@@ -68,6 +73,19 @@ export default function MeetingDetailsPage() {
     }
   });
 
+  const uploadMinutesMutation = useMutation({
+    mutationFn: (file: File) => meetingService.uploadMinutesFile(meetingId!, file),
+    onSuccess: () => {
+      toast.success("Minutes uploaded successfully");
+      setIsUploadingMinutes(false);
+      setMinutesFile(null);
+      refetch();
+    },
+    onError: () => {
+      toast.error("Failed to upload minutes");
+    }
+  });
+
   const handleDownloadMinutes = async () => {
     try {
       await meetingService.generateMinutesPdf(meetingId!);
@@ -84,6 +102,18 @@ export default function MeetingDetailsPage() {
 
   const handleSaveMinutes = async (content: string) => {
     await updateMinutesMutation.mutateAsync(content);
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      setMinutesFile(e.target.files[0]);
+    }
+  };
+
+  const handleUploadMinutes = async () => {
+    if (minutesFile) {
+      await uploadMinutesMutation.mutateAsync(minutesFile);
+    }
   };
 
   const formatDate = (dateString: string) => {
@@ -116,23 +146,15 @@ export default function MeetingDetailsPage() {
     );
   }
 
-  const stats = dashboardData ? dashboardData : {
+  // Safe calculation of stats with null checks
+  const stats = {
     taskCompletion: {
-      completed: 0,
-      total: 0,
-      percentage: 0
+      completed: dashboardData?.tasksByStatus?.find(s => s.name === "Completed")?.value || 0,
+      total: dashboardData?.tasksByStatus?.reduce((acc, curr) => acc + (curr.value || 0), 0) || 0,
+      percentage: dashboardData?.taskCompletion?.percentage || 0
     },
-    tasksByPriority: [
-      { name: 'High', value: 0 },
-      { name: 'Medium', value: 0 },
-      { name: 'Low', value: 0 }
-    ],
-    tasksByStatus: [
-      { name: 'Not Started', value: 0 },
-      { name: 'In Progress', value: 0 },
-      { name: 'Completed', value: 0 },
-      { name: 'Blocked', value: 0 }
-    ]
+    tasksByPriority: dashboardData?.tasksByPriority || [],
+    tasksByStatus: dashboardData?.tasksByStatus || []
   };
 
   return (
@@ -157,9 +179,15 @@ export default function MeetingDetailsPage() {
         
         <TabsContent value="overview" className="space-y-4">
           <Card>
-            <CardHeader>
-              <CardTitle>Meeting Details</CardTitle>
-              <CardDescription>Information about the meeting</CardDescription>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
+                <CardTitle>Meeting Details</CardTitle>
+                <CardDescription>Information about the meeting</CardDescription>
+              </div>
+              <Button variant="outline" onClick={() => setIsEditingMeeting(!isEditingMeeting)}>
+                <Edit className="h-4 w-4 mr-2" />
+                {isEditingMeeting ? "Cancel" : "Edit"}
+              </Button>
             </CardHeader>
             <CardContent className="space-y-2">
               <div className="flex items-center space-x-2">
@@ -237,15 +265,33 @@ export default function MeetingDetailsPage() {
               </CardContent>
             </Card>
           ) : (
-            <TaskProgressChart 
-              taskCompletion={{
-                total: stats.tasksByStatus.reduce((acc, curr) => acc + curr.value, 0),
-                completed: stats.tasksByStatus.find(s => s.name === "Completed")?.value || 0,
-                percentage: stats.taskCompletion?.percentage || 0
-              }}
-              tasksByStatus={stats.tasksByStatus}
-              tasksByPriority={stats.tasksByPriority}
-            />
+            <>
+              <Card>
+                <CardHeader>
+                  <CardTitle>AI Meeting Summary</CardTitle>
+                  <CardDescription>Generated summary of the meeting</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="prose max-w-none">
+                    {dashboardData?.aiSummary ? (
+                      <div dangerouslySetInnerHTML={{ __html: dashboardData.aiSummary.replace(/\n/g, '<br/>') }} />
+                    ) : (
+                      <p className="text-muted-foreground">No AI summary available yet.</p>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+              
+              <TaskProgressChart 
+                taskCompletion={{
+                  total: stats.taskCompletion.total,
+                  completed: stats.taskCompletion.completed,
+                  percentage: stats.taskCompletion.percentage
+                }}
+                tasksByStatus={stats.tasksByStatus}
+                tasksByPriority={stats.tasksByPriority}
+              />
+            </>
           )}
         </TabsContent>
 
@@ -258,13 +304,45 @@ export default function MeetingDetailsPage() {
             />
           ) : (
             <Card>
-              <CardHeader>
-                <CardTitle>Meeting Minutes</CardTitle>
-                <CardDescription>
-                  Summary and notes from the meeting
-                </CardDescription>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle>Meeting Minutes</CardTitle>
+                  <CardDescription>
+                    Summary and notes from the meeting
+                  </CardDescription>
+                </div>
+                <div className="space-x-2">
+                  <Button variant="outline" onClick={() => setIsUploadingMinutes(!isUploadingMinutes)}>
+                    <Upload className="h-4 w-4 mr-2" />
+                    Upload Minutes
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent>
+                {isUploadingMinutes && (
+                  <div className="border rounded-md p-4 mb-4">
+                    <h3 className="font-medium mb-2">Upload Minutes File</h3>
+                    <input 
+                      type="file" 
+                      onChange={handleFileChange}
+                      className="mb-4"
+                      accept=".pdf,.doc,.docx,.txt"
+                    />
+                    <div className="flex justify-end space-x-2">
+                      <Button variant="outline" onClick={() => setIsUploadingMinutes(false)}>
+                        Cancel
+                      </Button>
+                      <Button 
+                        onClick={handleUploadMinutes}
+                        disabled={!minutesFile || uploadMinutesMutation.isPending}
+                      >
+                        {uploadMinutesMutation.isPending && <Spinner className="mr-2 h-4 w-4" />}
+                        Upload
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
                 {meeting?.formattedMinutesText ? (
                   <div className="prose max-w-none">
                     <div dangerouslySetInnerHTML={{ __html: meeting.formattedMinutesText.replace(/\n/g, '<br/>') }} />
@@ -284,17 +362,29 @@ export default function MeetingDetailsPage() {
                 ) : (
                   <div className="text-center p-4">
                     <p className="text-muted-foreground">No minutes available for this meeting yet.</p>
-                    <Button variant="outline" className="mt-4" onClick={handleEditMinutes}>
-                      Add Minutes
-                    </Button>
+                    <div className="flex justify-center space-x-2 mt-4">
+                      <Button variant="outline" onClick={() => setIsUploadingMinutes(true)}>
+                        <Upload className="h-4 w-4 mr-2" />
+                        Upload Minutes
+                      </Button>
+                      <Button onClick={handleEditMinutes}>
+                        Create Minutes
+                      </Button>
+                    </div>
                   </div>
                 )}
               </CardContent>
               {(meeting?.formattedMinutesText || meeting?.extractedMinutesText) && (
                 <CardFooter>
-                  <Button variant="outline" onClick={handleEditMinutes}>
-                    Edit Minutes
-                  </Button>
+                  <div className="flex space-x-2">
+                    <Button variant="outline" onClick={handleEditMinutes}>
+                      Edit Minutes
+                    </Button>
+                    <Button onClick={handleDownloadMinutes}>
+                      <Download className="h-4 w-4 mr-2" />
+                      Download PDF
+                    </Button>
+                  </div>
                 </CardFooter>
               )}
             </Card>

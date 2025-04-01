@@ -1,7 +1,7 @@
 
 import { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
-import { CalendarIcon, ChevronLeft, ChevronRight, PlusCircle, Search } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
+import { CalendarIcon, ChevronLeft, ChevronRight, PlusCircle, Search, MoreHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -11,6 +11,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Spinner } from "@/components/ui/spinner";
@@ -18,6 +24,7 @@ import { meetingService } from "@/services/meetingService";
 import { Meeting } from "@/types";
 
 export default function MeetingsPage() {
+  const navigate = useNavigate();
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
@@ -104,6 +111,14 @@ export default function MeetingsPage() {
     }
   
     return formatDate(dateString);
+  };
+
+  const handleViewDashboard = (meetingId: string) => {
+    navigate(`/meetings/${meetingId}?tab=dashboard`);
+  };
+  
+  const handleViewDetails = (meetingId: string) => {
+    navigate(`/meetings/${meetingId}`);
   };
 
   return (
@@ -201,10 +216,7 @@ export default function MeetingsPage() {
           meetings.map((meeting) => (
             <Card key={meeting.meetingId} className="hover:shadow-md transition-shadow duration-200">
               <CardContent className="p-0">
-                <Link 
-                  to={`/meetings/${meeting.meetingId}`}
-                  className="flex flex-col md:flex-row justify-between items-start md:items-center p-6"
-                >
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center p-6">
                   <div className="flex items-start mb-4 md:mb-0">
                     <div className="mr-4 hidden md:block">
                       <div className="bg-muted p-2 rounded flex items-center justify-center h-12 w-12">
@@ -216,17 +228,39 @@ export default function MeetingsPage() {
                       <div className="text-sm text-muted-foreground">
                         {getRelativeTime(meeting.dateTime)}
                       </div>
+                      <Badge variant={meeting.userRole === 'host' ? 'default' : 'outline'} className="mt-2">
+                        {meeting.userRole === 'host' ? 'Host' : 'Attendee'}
+                      </Badge>
                     </div>
                   </div>
-                  <div className="flex items-center gap-4 w-full md:w-auto">
-                    <Badge variant={meeting.userRole === 'host' ? 'default' : 'outline'} className="ml-auto md:ml-0">
-                      {meeting.userRole === 'host' ? 'Host' : 'Attendee'}
-                    </Badge>
-                    <Button variant="outline" size="sm" className="w-full md:w-auto">
-                      View Details
+                  <div className="flex items-center gap-2 w-full md:w-auto">
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={() => handleViewDashboard(meeting.meetingId)}
+                    >
+                      Dashboard
                     </Button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon">
+                          <MoreHorizontal className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => handleViewDetails(meeting.meetingId)}>
+                          View Details
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => navigate(`/meetings/${meeting.meetingId}?tab=minutes`)}>
+                          View Minutes
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => navigate(`/meetings/${meeting.meetingId}?tab=actions`)}>
+                          Action Items
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
-                </Link>
+                </div>
               </CardContent>
             </Card>
           ))
