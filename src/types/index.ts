@@ -104,7 +104,7 @@ export interface Task {
     meetingId: string;
     name: string;
   } | null;
-  assignees: { _id: string; name: string }[];
+  assignees: { userId: string; name: string }[];
   deadline: string;
   priority: number;
   progress: 'Not Started' | 'In Progress' | 'Completed' | 'Blocked';
@@ -159,4 +159,5 @@ export interface DashboardData {
   };
   assignees: { userId: string; name: string }[];
   aiPdfAvailable: boolean;
+  actionItems: Task[];
 }

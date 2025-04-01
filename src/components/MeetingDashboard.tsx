@@ -24,18 +24,26 @@ export function MeetingDashboard() {
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
 
-  // Fetch meeting details - changed getMeetingById to getMeetingDetails
+  // Fetch meeting details
   const { data: meeting, isLoading, error, refetch } = useQuery({
     queryKey: ['meeting', meetingId],
     queryFn: () => meetingService.getMeetingDetails(meetingId || ''),
     enabled: !!meetingId,
   });
 
+  // Fetch the dashboard data which contains action items
+  const { data: dashboardData } = useQuery({
+    queryKey: ['dashboard', meetingId],
+    queryFn: () => meetingService.getDashboard(meetingId || ''),
+    enabled: !!meetingId,
+  });
+
   const isHost = meeting?.userRole === 'host';
+  const actionItems = dashboardData?.actionItems || [];
 
   // Calculate task statistics for charts
   const getTaskStatistics = () => {
-    if (!meeting?.actionItems || meeting.actionItems.length === 0) {
+    if (!actionItems || actionItems.length === 0) {
       return {
         taskCompletion: { completed: 0, total: 0, percentage: 0 },
         tasksByStatus: [
@@ -52,7 +60,7 @@ export function MeetingDashboard() {
       };
     }
 
-    const tasks = meeting.actionItems;
+    const tasks = actionItems;
     const total = tasks.length;
     const completed = tasks.filter(task => task.progress === 'Completed').length;
     const percentage = total > 0 ? Math.round((completed / total) * 100) : 0;
@@ -142,12 +150,13 @@ export function MeetingDashboard() {
   }
 
   const { taskCompletion, tasksByStatus, tasksByPriority } = getTaskStatistics();
+  const hasPdfAvailable = dashboardData?.aiPdfAvailable;
   
   return (
     <div className="space-y-8">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold mb-1">{meeting.title}</h1>
+          <h1 className="text-2xl font-bold mb-1">{meeting.name}</h1>
           <p className="text-muted-foreground">
             Dashboard Overview
           </p>
@@ -163,7 +172,7 @@ export function MeetingDashboard() {
               Meeting Details
             </Link>
           </Button>
-          {meeting.minutesPdfUrl && (
+          {hasPdfAvailable && (
             <Button
               size="sm"
               onClick={handleDownloadPdf}
@@ -174,7 +183,7 @@ export function MeetingDashboard() {
               Download Minutes PDF
             </Button>
           )}
-          {isHost && !meeting.minutesPdfUrl && (
+          {isHost && !hasPdfAvailable && (
             <Button
               size="sm"
               onClick={handleGeneratePdf}
@@ -257,7 +266,7 @@ export function MeetingDashboard() {
                     {meeting.attendees
                       .filter(a => a.role === 'host')
                       .map(host => (
-                        <div key={host._id} className="flex items-center justify-between rounded-lg border p-3">
+                        <div key={host.userId} className="flex items-center justify-between rounded-lg border p-3">
                           <div>
                             <p className="font-medium">{host.name}</p>
                             <p className="text-sm text-muted-foreground">{host.email}</p>
@@ -279,15 +288,15 @@ export function MeetingDashboard() {
                     {meeting.attendees
                       .filter(a => a.role === 'attendee')
                       .map(attendee => (
-                        <div key={attendee._id} className="flex items-center justify-between rounded-lg border p-3">
+                        <div key={attendee.userId} className="flex items-center justify-between rounded-lg border p-3">
                           <div>
                             <p className="font-medium">{attendee.name}</p>
                             <p className="text-sm text-muted-foreground">{attendee.email}</p>
                           </div>
                           <div>
                             <Badge variant="outline">
-                              {meeting.actionItems.filter(item => 
-                                item.assignees.some(a => a._id === attendee._id)
+                              {actionItems.filter(item => 
+                                item.assignees.some(a => a.userId === attendee.userId)
                               ).length} tasks
                             </Badge>
                           </div>
@@ -305,13 +314,13 @@ export function MeetingDashboard() {
               {meeting.attendees
                 .slice(0, 6)
                 .map(attendee => (
-                  <div key={attendee._id} className="flex items-center justify-between rounded-lg border p-3">
+                  <div key={attendee.userId} className="flex items-center justify-between rounded-lg border p-3">
                     <div className="truncate">
                       <p className="font-medium truncate">{attendee.name}</p>
                       <div className="flex items-center">
                         <Badge variant="outline" className="truncate">
-                          {meeting.actionItems.filter(item => 
-                            item.assignees.some(a => a._id === attendee._id)
+                          {actionItems.filter(item => 
+                            item.assignees.some(a => a.userId === attendee.userId)
                           ).length} tasks
                         </Badge>
                         <Badge 
@@ -339,7 +348,7 @@ export function MeetingDashboard() {
       </Card>
 
       {/* Minutes Preview */}
-      {meeting.minutesText && (
+      {(meeting.extractedMinutesText || meeting.formattedMinutesText) && (
         <Card>
           <CardHeader>
             <CardTitle>Meeting Minutes</CardTitle>
@@ -348,7 +357,10 @@ export function MeetingDashboard() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <RichTextEditor initialValue={meeting.minutesText} readOnly={true} />
+            <RichTextEditor 
+              initialValue={meeting.formattedMinutesText || meeting.extractedMinutesText || ""} 
+              readOnly={true} 
+            />
           </CardContent>
         </Card>
       )}
