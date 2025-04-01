@@ -107,7 +107,7 @@ export default function TaskCard({
             <div className="flex flex-col gap-2">
               <div className="flex flex-wrap gap-1">
                 {task.assignees.map((assignee) => (
-                  <Badge key={assignee._id} variant="secondary" className="text-xs">
+                  <Badge key={assignee.userId} variant="secondary" className="text-xs">
                     {assignee.name}
                   </Badge>
                 ))}
