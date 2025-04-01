@@ -3,7 +3,7 @@ import React, { useEffect, useState } from "react";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { CalendarIcon, Clock } from "lucide-react";
+import { CalendarIcon, Clock, AlertCircle, CheckCircle, UserCircle, Settings, ArrowRight } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { useQuery } from "@tanstack/react-query";
@@ -12,10 +12,14 @@ import { taskService } from "@/services/taskService";
 import { format } from "date-fns";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TaskProgressChart } from "@/components/TaskProgressChart";
+import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
 
 const DashboardPage: React.FC = () => {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState("overview");
+  const [pendingTasks, setPendingTasks] = useState(0);
+  const [completedTasks, setCompletedTasks] = useState(0);
 
   // Fetch upcoming meetings
   const { data: meetingsData, isLoading: loadingMeetings } = useQuery({
@@ -35,6 +39,21 @@ const DashboardPage: React.FC = () => {
     queryFn: () => taskService.getTaskStatistics(),
   });
 
+  // Calculate pending/completed tasks from task data
+  useEffect(() => {
+    if (tasksData?.tasks) {
+      const pending = tasksData.tasks.filter(
+        task => task.progress !== "Completed"
+      ).length;
+      const completed = tasksData.tasks.filter(
+        task => task.progress === "Completed"
+      ).length;
+      
+      setPendingTasks(pending);
+      setCompletedTasks(completed);
+    }
+  }, [tasksData]);
+
   // Format date for display
   const formatDate = (dateString: string) => {
     try {
@@ -50,6 +69,137 @@ const DashboardPage: React.FC = () => {
       <div>
         <h1 className="text-2xl font-bold">Welcome, {user?.name}</h1>
         <p className="text-muted-foreground">Here's an overview of your meetings and tasks</p>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        {/* Task Summary Card */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">Task Summary</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {loadingTasks ? (
+              <Skeleton className="h-12 w-full" />
+            ) : (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center">
+                    <AlertCircle className="mr-2 h-4 w-4 text-amber-500" />
+                    <span>Pending Tasks</span>
+                  </div>
+                  <Badge variant="outline">{pendingTasks}</Badge>
+                </div>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center">
+                    <CheckCircle className="mr-2 h-4 w-4 text-green-500" />
+                    <span>Completed Tasks</span>
+                  </div>
+                  <Badge variant="outline">{completedTasks}</Badge>
+                </div>
+                <div className="pt-2">
+                  <div className="flex justify-between text-xs text-muted-foreground mb-1">
+                    <span>Progress</span>
+                    <span>{tasksData?.tasks ? 
+                      `${Math.round((completedTasks / (pendingTasks + completedTasks || 1)) * 100)}%` : 
+                      '0%'}
+                    </span>
+                  </div>
+                  <Progress 
+                    value={tasksData?.tasks ? 
+                      (completedTasks / (pendingTasks + completedTasks || 1)) * 100 : 
+                      0} 
+                    className="h-2"
+                  />
+                </div>
+              </div>
+            )}
+          </CardContent>
+          <CardFooter className="pt-0">
+            <Button asChild variant="link" size="sm" className="px-0">
+              <Link to="/tasks">
+                View all tasks
+                <ArrowRight className="ml-1 h-4 w-4" />
+              </Link>
+            </Button>
+          </CardFooter>
+        </Card>
+
+        {/* User Profile Card */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">Profile</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {!user ? (
+              <Skeleton className="h-12 w-full" />
+            ) : (
+              <div className="flex items-start space-x-4">
+                <div className="rounded-full bg-primary/10 p-2">
+                  <UserCircle className="h-8 w-8 text-primary" />
+                </div>
+                <div>
+                  <p className="font-medium">{user.name}</p>
+                  <p className="text-sm text-muted-foreground">{user.email}</p>
+                  {user.organisation && (
+                    <Badge variant="outline" className="mt-1">
+                      {user.organisation}
+                    </Badge>
+                  )}
+                </div>
+              </div>
+            )}
+          </CardContent>
+          <CardFooter className="pt-0">
+            <Button asChild variant="link" size="sm" className="px-0">
+              <Link to="/profile">
+                Edit profile
+                <Settings className="ml-1 h-4 w-4" />
+              </Link>
+            </Button>
+          </CardFooter>
+        </Card>
+
+        {/* Next Meeting Card */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">Next Meeting</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {loadingMeetings ? (
+              <Skeleton className="h-12 w-full" />
+            ) : meetingsData?.meetings && meetingsData.meetings.length > 0 ? (
+              <div className="space-y-2">
+                <p className="font-medium">{meetingsData.meetings[0].name}</p>
+                <div className="flex items-center text-sm text-muted-foreground">
+                  <CalendarIcon className="mr-1 h-4 w-4" />
+                  <span>{formatDate(meetingsData.meetings[0].dateTime)}</span>
+                </div>
+                <Badge variant={meetingsData.meetings[0].userRole === "host" ? "default" : "secondary"}>
+                  {meetingsData.meetings[0].userRole === "host" ? "Hosting" : "Attending"}
+                </Badge>
+              </div>
+            ) : (
+              <p className="text-muted-foreground text-sm">No upcoming meetings</p>
+            )}
+          </CardContent>
+          <CardFooter className="pt-0">
+            {meetingsData?.meetings && meetingsData.meetings.length > 0 ? (
+              <Button asChild variant="link" size="sm" className="px-0">
+                <Link to={`/meetings/${meetingsData.meetings[0].meetingId}`}>
+                  View details
+                  <ArrowRight className="ml-1 h-4 w-4" />
+                </Link>
+              </Button>
+            ) : (
+              <Button asChild variant="link" size="sm" className="px-0">
+                <Link to="/meetings/create">
+                  Schedule a meeting
+                  <CalendarIcon className="ml-1 h-4 w-4" />
+                </Link>
+              </Button>
+            )}
+          </CardFooter>
+        </Card>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">

@@ -41,6 +41,12 @@ api.interceptors.response.use(
         toast.error('Session expired. Please login again.');
         window.location.href = '/login';
       }
+    } else if (error.response?.status === 403) {
+      // Handle forbidden errors
+      toast.error('You do not have permission to perform this action.');
+    } else if (error.response?.status === 429) {
+      // Handle rate limiting
+      toast.error('Too many requests. Please try again later.');
     } else {
       // Show general error toast for other errors
       toast.error(message);
@@ -49,5 +55,32 @@ api.interceptors.response.use(
     return Promise.reject(error);
   }
 );
+
+// Download helper function
+api.download = async (url: string, filename?: string) => {
+  try {
+    const response = await api.get(url, {
+      responseType: 'blob',
+    });
+    
+    // Create file link and trigger download
+    const href = window.URL.createObjectURL(response.data);
+    const link = document.createElement('a');
+    link.href = href;
+    link.setAttribute('download', filename || 'download');
+    document.body.appendChild(link);
+    link.click();
+    
+    // Clean up
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(href);
+    
+    return true;
+  } catch (error) {
+    console.error('Download failed:', error);
+    toast.error('Failed to download file.');
+    return false;
+  }
+};
 
 export default api;

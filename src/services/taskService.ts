@@ -1,6 +1,7 @@
 
 import api from "./api";
 import { Task, TasksResponse } from "../types";
+import { ProgressStatus } from "@/components/TaskProgressDialog";
 
 export const taskService = {
   // Get tasks assigned to current user
@@ -61,7 +62,7 @@ export const taskService = {
       assignees?: string[];
       deadline?: string;
       priority?: number;
-      progress?: "Not Started" | "In Progress" | "Completed" | "Blocked";
+      progress?: ProgressStatus;
       additionalComments?: string;
     }
   ): Promise<Task> {
@@ -75,7 +76,7 @@ export const taskService = {
   // Update task progress (for assignees)
   async updateTaskProgress(
     taskId: string,
-    progress: "Not Started" | "In Progress" | "Completed" | "Blocked"
+    progress: ProgressStatus
   ): Promise<Task> {
     return this.updateTask(taskId, { progress });
   },
@@ -103,7 +104,32 @@ export const taskService = {
       } 
     }>("/tasks/statistics");
     return response.data.data;
-  }
+  },
+  
+  // Get tasks by meeting id
+  async getTasksByMeetingId(meetingId: string): Promise<Task[]> {
+    const response = await api.get<{ success: boolean; data: Task[] }>(
+      `/tasks/meeting/${meetingId}`
+    );
+    return response.data.data;
+  },
+  
+  // Batch update tasks
+  async batchUpdateTasks(tasks: {
+    taskId: string;
+    taskName?: string;
+    assignees?: string[];
+    deadline?: string;
+    priority?: number;
+    progress?: ProgressStatus;
+    additionalComments?: string;
+  }[]): Promise<Task[]> {
+    const response = await api.put<{ success: boolean; data: Task[] }>(
+      `/tasks/batch`,
+      { tasks }
+    );
+    return response.data.data;
+  },
 };
 
 export default taskService;

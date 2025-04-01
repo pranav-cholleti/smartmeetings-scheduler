@@ -146,11 +146,11 @@ export default function MeetingDetailsPage() {
     );
   }
 
-  // Safe calculation of stats with null checks
+  // Safe calculation of stats with null checks - Fix the reduce error
   const stats = {
     taskCompletion: {
-      completed: dashboardData?.tasksByStatus?.find(s => s.name === "Completed")?.value || 0,
-      total: dashboardData?.tasksByStatus?.reduce((acc, curr) => acc + (curr.value || 0), 0) || 0,
+      completed: dashboardData?.tasksByStatus?.find((s: any) => s.name === "Completed")?.value || 0,
+      total: dashboardData?.tasksByStatus?.reduce((acc: number, curr: any) => acc + (curr.value || 0), 0) || 0,
       percentage: dashboardData?.taskCompletion?.percentage || 0
     },
     tasksByPriority: dashboardData?.tasksByPriority || [],

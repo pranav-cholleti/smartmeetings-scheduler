@@ -1,5 +1,5 @@
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -17,6 +17,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
+import { Badge } from "@/components/ui/badge";
+import { toast } from "sonner";
 
 export type ProgressStatus = "Not Started" | "In Progress" | "Completed" | "Blocked";
 
@@ -27,6 +29,7 @@ interface TaskProgressDialogProps {
   isLoading: boolean;
   taskName?: string;
   currentProgress?: ProgressStatus;
+  taskId?: string;
 }
 
 export default function TaskProgressDialog({
@@ -36,14 +39,21 @@ export default function TaskProgressDialog({
   isLoading,
   taskName = "Task",
   currentProgress,
+  taskId,
 }: TaskProgressDialogProps) {
   const [selectedProgress, setSelectedProgress] = useState<ProgressStatus | undefined>(
     currentProgress
   );
 
+  // Reset selected progress when dialog opens with new task
+  useEffect(() => {
+    setSelectedProgress(currentProgress);
+  }, [currentProgress, isOpen]);
+
   const handleSubmit = () => {
     if (selectedProgress) {
       onUpdate(selectedProgress);
+      toast.success(`Task status updated to ${selectedProgress}`);
     }
   };
   
@@ -51,6 +61,19 @@ export default function TaskProgressDialog({
     // Reset the selected progress when dialog closes
     setSelectedProgress(currentProgress);
     onClose();
+  };
+
+  const getProgressBadgeVariant = (status: ProgressStatus) => {
+    switch (status) {
+      case "Completed":
+        return "success";
+      case "In Progress":
+        return "default";
+      case "Blocked":
+        return "destructive";
+      default:
+        return "secondary";
+    }
   };
 
   return (
@@ -63,12 +86,21 @@ export default function TaskProgressDialog({
           </DialogDescription>
         </DialogHeader>
         
-        <div className="py-4">
+        <div className="py-4 space-y-4">
+          {currentProgress && (
+            <div className="flex items-center space-x-2">
+              <span className="text-sm text-muted-foreground">Current status:</span>
+              <Badge variant={getProgressBadgeVariant(currentProgress) as any}>
+                {currentProgress}
+              </Badge>
+            </div>
+          )}
+          
           <Select
             value={selectedProgress}
             onValueChange={(value) => setSelectedProgress(value as ProgressStatus)}
           >
-            <SelectTrigger>
+            <SelectTrigger className="w-full">
               <SelectValue placeholder="Select new progress status" />
             </SelectTrigger>
             <SelectContent>
@@ -84,7 +116,11 @@ export default function TaskProgressDialog({
           <Button variant="outline" onClick={handleDialogClose} disabled={isLoading}>
             Cancel
           </Button>
-          <Button onClick={handleSubmit} disabled={!selectedProgress || isLoading}>
+          <Button 
+            onClick={handleSubmit} 
+            disabled={!selectedProgress || isLoading || selectedProgress === currentProgress}
+            variant={selectedProgress === "Completed" ? "success" : "default"}
+          >
             {isLoading && <Spinner className="mr-2 h-4 w-4" />}
             Update
           </Button>
