@@ -66,13 +66,13 @@ export default function TaskProgressDialog({
   const getProgressBadgeVariant = (status: ProgressStatus) => {
     switch (status) {
       case "Completed":
-        return "success";
+        return "secondary";
       case "In Progress":
         return "default";
       case "Blocked":
         return "destructive";
       default:
-        return "secondary";
+        return "outline";
     }
   };
 
@@ -90,7 +90,7 @@ export default function TaskProgressDialog({
           {currentProgress && (
             <div className="flex items-center space-x-2">
               <span className="text-sm text-muted-foreground">Current status:</span>
-              <Badge variant={getProgressBadgeVariant(currentProgress) as any}>
+              <Badge variant={getProgressBadgeVariant(currentProgress)}>
                 {currentProgress}
               </Badge>
             </div>

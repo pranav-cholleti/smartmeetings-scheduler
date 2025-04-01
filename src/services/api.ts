@@ -83,9 +83,14 @@ const downloadFile = async (url: string, filename?: string) => {
   }
 };
 
-// Add the download method to the api object
+// Create a properly typed API instance with download function
 const apiWithDownload = {
   ...api,
+  get: api.get.bind(api),
+  post: api.post.bind(api),
+  put: api.put.bind(api),
+  delete: api.delete.bind(api),
+  patch: api.patch.bind(api),
   download: downloadFile,
 };
 

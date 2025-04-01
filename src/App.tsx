@@ -18,6 +18,9 @@ import CreateMeetingPage from "./pages/CreateMeetingPage";
 import TasksPage from "./pages/TasksPage";
 import NotFound from "./pages/NotFound";
 
+// New component
+import { MeetingDashboard } from "./components/MeetingDashboard";
+
 const queryClient = new QueryClient();
 
 const App = () => (
@@ -59,6 +62,16 @@ const App = () => (
                 <ProtectedRoute>
                   <AppLayout>
                     <MeetingDetailsPage />
+                  </AppLayout>
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/meetings/:meetingId/dashboard" 
+              element={
+                <ProtectedRoute>
+                  <AppLayout>
+                    <MeetingDashboard />
                   </AppLayout>
                 </ProtectedRoute>
               } 

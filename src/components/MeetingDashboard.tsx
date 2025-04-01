@@ -1,275 +1,357 @@
 
 import { useState, useEffect } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Link, useParams } from "react-router-dom";
+import { AlertTriangle, Download, FileText, Users } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Spinner } from "@/components/ui/spinner";
-import { Download, Users, CheckCircle, Clock, AlertCircle } from "lucide-react";
-import { TaskProgressChart } from "./TaskProgressChart";
-import { Task } from "@/types";
+import { Separator } from "@/components/ui/separator";
+import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
+
+import { useAuth } from "@/context/AuthContext";
+import { RichTextEditor } from "@/components/RichTextEditor";
+import { TaskProgressChart } from "@/components/TaskProgressChart";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import meetingService from "@/services/meetingService";
 import minutesService from "@/services/minutesService";
-import { ProgressStatus } from "./TaskProgressDialog";
 
-interface MeetingDashboardProps {
-  meetingId: string;
-  aiSummary?: string;
-  tasks: Task[];
-  assignees: Array<{
-    id: string;
-    name: string;
-    email: string;
-    avatar?: string;
-  }>;
-  isHost: boolean;
-  isLoading?: boolean;
-}
+export function MeetingDashboard() {
+  const { meetingId } = useParams<{ meetingId: string }>();
+  const { user } = useAuth();
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+  const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
 
-export default function MeetingDashboard({
-  meetingId,
-  aiSummary = "Meeting summary not available yet",
-  tasks = [],
-  assignees = [],
-  isHost,
-  isLoading = false,
-}: MeetingDashboardProps) {
-  const [generatingPdf, setGeneratingPdf] = useState(false);
-  const [downloadingPdf, setDownloadingPdf] = useState(false);
-  const [taskStats, setTaskStats] = useState({
-    total: 0,
-    "Not Started": 0,
-    "In Progress": 0,
-    Completed: 0,
-    Blocked: 0,
+  // Fetch meeting details
+  const { data: meeting, isLoading, error, refetch } = useQuery({
+    queryKey: ['meeting', meetingId],
+    queryFn: () => meetingService.getMeetingById(meetingId || ''),
+    enabled: !!meetingId,
   });
 
-  // Calculate task statistics when tasks change
-  useEffect(() => {
-    if (!tasks) return;
-    
-    const stats = {
-      total: tasks.length,
-      "Not Started": 0,
-      "In Progress": 0,
-      Completed: 0,
-      Blocked: 0,
-    };
-    
-    tasks.forEach((task) => {
-      const status = task.progress as ProgressStatus;
-      if (status && stats[status] !== undefined) {
-        stats[status]++;
-      } else {
-        stats["Not Started"]++;
-      }
-    });
-    
-    setTaskStats(stats);
-  }, [tasks]);
+  const isHost = meeting?.userRole === 'host';
 
-  // Format for chart display
-  const chartData = Object.entries(taskStats)
-    .filter(([key]) => key !== "total")
-    .map(([name, value]) => ({ name, value }));
+  // Calculate task statistics for charts
+  const getTaskStatistics = () => {
+    if (!meeting?.actionItems || meeting.actionItems.length === 0) {
+      return {
+        taskCompletion: { completed: 0, total: 0, percentage: 0 },
+        tasksByStatus: [
+          { name: 'Not Started', value: 0 },
+          { name: 'In Progress', value: 0 },
+          { name: 'Completed', value: 0 },
+          { name: 'Blocked', value: 0 },
+        ],
+        tasksByPriority: [
+          { name: 'High (1-3)', value: 0 },
+          { name: 'Medium (4-7)', value: 0 },
+          { name: 'Low (8-10)', value: 0 },
+        ],
+      };
+    }
+
+    const tasks = meeting.actionItems;
+    const total = tasks.length;
+    const completed = tasks.filter(task => task.progress === 'Completed').length;
+    const percentage = total > 0 ? Math.round((completed / total) * 100) : 0;
+
+    // Count tasks by status
+    const notStarted = tasks.filter(task => task.progress === 'Not Started').length;
+    const inProgress = tasks.filter(task => task.progress === 'In Progress').length;
+    const blocked = tasks.filter(task => task.progress === 'Blocked').length;
+
+    // Count tasks by priority
+    const highPriority = tasks.filter(task => task.priority <= 3).length;
+    const mediumPriority = tasks.filter(task => task.priority > 3 && task.priority <= 7).length;
+    const lowPriority = tasks.filter(task => task.priority > 7).length;
+
+    return {
+      taskCompletion: { completed, total, percentage },
+      tasksByStatus: [
+        { name: 'Not Started', value: notStarted },
+        { name: 'In Progress', value: inProgress },
+        { name: 'Completed', value: completed },
+        { name: 'Blocked', value: blocked },
+      ],
+      tasksByPriority: [
+        { name: 'High (1-3)', value: highPriority },
+        { name: 'Medium (4-7)', value: mediumPriority },
+        { name: 'Low (8-10)', value: lowPriority },
+      ],
+    };
+  };
 
   const handleGeneratePdf = async () => {
     if (!meetingId) return;
     
-    setGeneratingPdf(true);
+    setIsGeneratingPdf(true);
     try {
       const result = await minutesService.generateMinutesPdf(meetingId);
       if (result.success) {
-        toast.success("PDF generated successfully");
+        toast.success("PDF generated successfully!");
+        refetch();
       }
     } catch (error) {
       console.error("Error generating PDF:", error);
+      toast.error("Failed to generate PDF.");
     } finally {
-      setGeneratingPdf(false);
+      setIsGeneratingPdf(false);
     }
   };
 
   const handleDownloadPdf = async () => {
     if (!meetingId) return;
     
-    setDownloadingPdf(true);
+    setIsDownloadingPdf(true);
     try {
-      const success = await minutesService.downloadMinutesPdf(meetingId);
+      const filename = `meeting-${meetingId}-minutes.pdf`;
+      const success = await minutesService.downloadMinutesPdf(meetingId, filename);
       if (success) {
-        toast.success("PDF downloaded successfully");
+        toast.success("PDF downloaded successfully!");
       }
     } catch (error) {
       console.error("Error downloading PDF:", error);
+      toast.error("Failed to download PDF.");
     } finally {
-      setDownloadingPdf(false);
+      setIsDownloadingPdf(false);
     }
   };
 
+  // For empty state or loading
   if (isLoading) {
     return (
-      <div className="flex justify-center items-center h-64">
-        <Spinner className="h-8 w-8" />
-        <span className="ml-2">Loading meeting dashboard...</span>
+      <div className="w-full h-64 flex items-center justify-center">
+        <Spinner size="lg" />
       </div>
     );
   }
 
+  if (error || !meeting) {
+    return (
+      <div className="p-8 text-center">
+        <AlertTriangle className="h-16 w-16 text-amber-500 mx-auto mb-4" />
+        <h3 className="text-xl font-medium mb-2">Failed to load meeting dashboard</h3>
+        <p className="text-muted-foreground mb-4">
+          There was an error loading the meeting information.
+        </p>
+        <Button onClick={() => refetch()}>Try Again</Button>
+      </div>
+    );
+  }
+
+  const { taskCompletion, tasksByStatus, tasksByPriority } = getTaskStatistics();
+  
   return (
-    <div className="space-y-6">
-      {/* AI Summary Card */}
-      <Card className="shadow-md">
-        <CardHeader className="bg-muted/50">
-          <CardTitle className="text-xl">AI Meeting Summary</CardTitle>
+    <div className="space-y-8">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold mb-1">{meeting.title}</h1>
+          <p className="text-muted-foreground">
+            Dashboard Overview
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            asChild
+          >
+            <Link to={`/meetings/${meetingId}`}>
+              <FileText className="mr-2 h-4 w-4" />
+              Meeting Details
+            </Link>
+          </Button>
+          {meeting.minutesPdfUrl && (
+            <Button
+              size="sm"
+              onClick={handleDownloadPdf}
+              disabled={isDownloadingPdf}
+              className="gap-2"
+            >
+              {isDownloadingPdf ? <Spinner size="sm" /> : <Download className="h-4 w-4" />}
+              Download Minutes PDF
+            </Button>
+          )}
+          {isHost && !meeting.minutesPdfUrl && (
+            <Button
+              size="sm"
+              onClick={handleGeneratePdf}
+              disabled={isGeneratingPdf}
+              className="gap-2"
+            >
+              {isGeneratingPdf ? <Spinner size="sm" /> : <FileText className="h-4 w-4" />}
+              Generate Minutes PDF
+            </Button>
+          )}
+        </div>
+      </div>
+
+      <Separator />
+
+      {/* AI Summary Section */}
+      <Card>
+        <CardHeader>
+          <CardTitle>AI Meeting Summary</CardTitle>
+          <CardDescription>
+            Generated summary based on meeting minutes
+          </CardDescription>
         </CardHeader>
-        <CardContent className="pt-6">
-          <div className="prose max-w-none">
-            <p>{aiSummary}</p>
-          </div>
+        <CardContent>
+          {meeting.aiSummary ? (
+            <div className="prose max-w-none">
+              <div dangerouslySetInnerHTML={{ __html: meeting.aiSummary }} />
+            </div>
+          ) : (
+            <div className="text-center py-8 text-muted-foreground">
+              <p>No AI summary available for this meeting yet.</p>
+              {isHost && (
+                <p className="mt-2">
+                  Generate a meeting summary by uploading and processing meeting minutes.
+                </p>
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
 
-      {/* Quick Stats Row */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Total Tasks Card */}
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Total Tasks
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{taskStats.total}</div>
-          </CardContent>
-        </Card>
+      {/* Task Statistics */}
+      <TaskProgressChart 
+        taskCompletion={taskCompletion} 
+        tasksByStatus={tasksByStatus} 
+        tasksByPriority={tasksByPriority} 
+      />
 
-        {/* Completed Tasks Card */}
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center">
-              <CheckCircle className="mr-2 h-4 w-4 text-green-500" />
-              Completed
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-600">
-              {taskStats.Completed}
-              <span className="text-sm font-normal text-muted-foreground ml-1">
-                ({taskStats.total > 0
-                  ? Math.round((taskStats.Completed / taskStats.total) * 100)
-                  : 0}%)
-              </span>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* In Progress Tasks Card */}
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center">
-              <Clock className="mr-2 h-4 w-4 text-blue-500" />
-              In Progress
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-blue-600">
-              {taskStats["In Progress"]}
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Blocked Tasks Card */}
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center">
-              <AlertCircle className="mr-2 h-4 w-4 text-red-500" />
-              Blocked
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-red-600">
-              {taskStats.Blocked}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Task Progress Chart & Assignees */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Progress Chart */}
-        <Card className="shadow-md">
-          <CardHeader className="bg-muted/50">
-            <CardTitle className="text-xl">Task Progress</CardTitle>
-          </CardHeader>
-          <CardContent className="pt-6 h-80">
-            <TaskProgressChart data={chartData} />
-          </CardContent>
-        </Card>
-
-        {/* Assignees */}
-        <Card className="shadow-md">
-          <CardHeader className="bg-muted/50">
-            <CardTitle className="flex items-center">
-              <Users className="mr-2 h-5 w-5" />
-              Task Assignees
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="pt-6">
-            {assignees.length === 0 ? (
-              <p className="text-muted-foreground">No assignees yet</p>
-            ) : (
-              <ul className="space-y-2">
-                {assignees.map((user) => (
-                  <li key={user.id} className="flex items-center p-2 rounded-md bg-muted/30">
-                    <div className="h-8 w-8 rounded-full bg-primary/20 flex items-center justify-center text-primary font-medium">
-                      {user.name.charAt(0).toUpperCase()}
+      {/* Attendees Section */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <div>
+            <CardTitle>Attendees & Action Items</CardTitle>
+            <CardDescription>
+              People involved in this meeting
+            </CardDescription>
+          </div>
+          <Sheet>
+            <SheetTrigger asChild>
+              <Button variant="outline" size="sm">
+                <Users className="h-4 w-4 mr-2" />
+                View All
+              </Button>
+            </SheetTrigger>
+            <SheetContent>
+              <SheetHeader>
+                <SheetTitle>Meeting Participants</SheetTitle>
+                <SheetDescription>
+                  All attendees and their roles
+                </SheetDescription>
+              </SheetHeader>
+              <div className="mt-6 space-y-6">
+                {/* Host section */}
+                <div>
+                  <h3 className="font-medium mb-2 flex items-center">
+                    Host
+                    <Badge className="ml-2">1</Badge>
+                  </h3>
+                  <div className="space-y-2">
+                    {meeting.attendees
+                      .filter(a => a.role === 'host')
+                      .map(host => (
+                        <div key={host._id} className="flex items-center justify-between rounded-lg border p-3">
+                          <div>
+                            <p className="font-medium">{host.name}</p>
+                            <p className="text-sm text-muted-foreground">{host.email}</p>
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                </div>
+                
+                {/* Attendees section */}
+                <div>
+                  <h3 className="font-medium mb-2 flex items-center">
+                    Attendees
+                    <Badge className="ml-2">
+                      {meeting.attendees.filter(a => a.role === 'attendee').length}
+                    </Badge>
+                  </h3>
+                  <div className="space-y-2">
+                    {meeting.attendees
+                      .filter(a => a.role === 'attendee')
+                      .map(attendee => (
+                        <div key={attendee._id} className="flex items-center justify-between rounded-lg border p-3">
+                          <div>
+                            <p className="font-medium">{attendee.name}</p>
+                            <p className="text-sm text-muted-foreground">{attendee.email}</p>
+                          </div>
+                          <div>
+                            <Badge variant="outline">
+                              {meeting.actionItems.filter(item => 
+                                item.assignees.some(a => a._id === attendee._id)
+                              ).length} tasks
+                            </Badge>
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                </div>
+              </div>
+            </SheetContent>
+          </Sheet>
+        </CardHeader>
+        <CardContent>
+          {meeting.attendees.length > 0 ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+              {meeting.attendees
+                .slice(0, 6)
+                .map(attendee => (
+                  <div key={attendee._id} className="flex items-center justify-between rounded-lg border p-3">
+                    <div className="truncate">
+                      <p className="font-medium truncate">{attendee.name}</p>
+                      <div className="flex items-center">
+                        <Badge variant="outline" className="truncate">
+                          {meeting.actionItems.filter(item => 
+                            item.assignees.some(a => a._id === attendee._id)
+                          ).length} tasks
+                        </Badge>
+                        <Badge 
+                          variant={attendee.role === 'host' ? 'default' : 'secondary'}
+                          className="ml-2"
+                        >
+                          {attendee.role}
+                        </Badge>
+                      </div>
                     </div>
-                    <div className="ml-2 flex-1">
-                      <p className="text-sm font-medium">{user.name}</p>
-                      <p className="text-xs text-muted-foreground">{user.email}</p>
-                    </div>
-                  </li>
+                  </div>
                 ))}
-              </ul>
-            )}
+            </div>
+          ) : (
+            <p className="text-center py-4 text-muted-foreground">No attendees added to this meeting.</p>
+          )}
+          {meeting.attendees.length > 6 && (
+            <div className="mt-4 text-center">
+              <p className="text-sm text-muted-foreground">
+                + {meeting.attendees.length - 6} more attendees
+              </p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Minutes Preview */}
+      {meeting.minutesText && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Meeting Minutes</CardTitle>
+            <CardDescription>
+              Extracted from uploaded document
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <RichTextEditor initialValue={meeting.minutesText} readOnly={true} />
           </CardContent>
         </Card>
-      </div>
-
-      {/* PDF Actions */}
-      <div className="flex flex-col sm:flex-row gap-4">
-        {isHost && (
-          <Button 
-            variant="default" 
-            onClick={handleGeneratePdf} 
-            disabled={generatingPdf}
-          >
-            {generatingPdf ? (
-              <>
-                <Spinner className="mr-2 h-4 w-4" />
-                Generating PDF...
-              </>
-            ) : (
-              <>Generate AI Minutes PDF</>
-            )}
-          </Button>
-        )}
-        <Button 
-          variant="outline" 
-          onClick={handleDownloadPdf} 
-          disabled={downloadingPdf}
-          className="flex items-center"
-        >
-          {downloadingPdf ? (
-            <>
-              <Spinner className="mr-2 h-4 w-4" />
-              Downloading...
-            </>
-          ) : (
-            <>
-              <Download className="mr-2 h-4 w-4" />
-              Download Minutes PDF
-            </>
-          )}
-        </Button>
-      </div>
+      )}
     </div>
   );
 }
