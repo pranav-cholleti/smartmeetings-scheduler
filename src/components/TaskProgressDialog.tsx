@@ -119,7 +119,8 @@ export default function TaskProgressDialog({
           <Button 
             onClick={handleSubmit} 
             disabled={!selectedProgress || isLoading || selectedProgress === currentProgress}
-            variant={selectedProgress === "Completed" ? "success" : "default"}
+            variant={selectedProgress === "Completed" ? "secondary" : "default"}
+            className={selectedProgress === "Completed" ? "bg-green-600 hover:bg-green-700" : ""}
           >
             {isLoading && <Spinner className="mr-2 h-4 w-4" />}
             Update

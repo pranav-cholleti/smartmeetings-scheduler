@@ -1,186 +1,275 @@
 
-import React from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { useState, useEffect } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Progress } from "@/components/ui/progress";
-import { Download, AlertTriangle, CheckCircle, Clock, UserCircle } from "lucide-react";
-import { TaskProgressChart } from "@/components/TaskProgressChart";
 import { Spinner } from "@/components/ui/spinner";
-import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import { Download, Users, CheckCircle, Clock, AlertCircle } from "lucide-react";
+import { TaskProgressChart } from "./TaskProgressChart";
+import { Task } from "@/types";
+import { toast } from "sonner";
+import minutesService from "@/services/minutesService";
+import { ProgressStatus } from "./TaskProgressDialog";
 
 interface MeetingDashboardProps {
-  isLoading: boolean;
-  dashboardData: any;
+  meetingId: string;
+  aiSummary?: string;
+  tasks: Task[];
+  assignees: Array<{
+    id: string;
+    name: string;
+    email: string;
+    avatar?: string;
+  }>;
   isHost: boolean;
-  onGeneratePdf: () => void;
-  isGeneratingPdf: boolean;
+  isLoading?: boolean;
 }
 
-export function MeetingDashboard({
-  isLoading,
-  dashboardData,
+export default function MeetingDashboard({
+  meetingId,
+  aiSummary = "Meeting summary not available yet",
+  tasks = [],
+  assignees = [],
   isHost,
-  onGeneratePdf,
-  isGeneratingPdf
+  isLoading = false,
 }: MeetingDashboardProps) {
+  const [generatingPdf, setGeneratingPdf] = useState(false);
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
+  const [taskStats, setTaskStats] = useState({
+    total: 0,
+    "Not Started": 0,
+    "In Progress": 0,
+    Completed: 0,
+    Blocked: 0,
+  });
+
+  // Calculate task statistics when tasks change
+  useEffect(() => {
+    if (!tasks) return;
+    
+    const stats = {
+      total: tasks.length,
+      "Not Started": 0,
+      "In Progress": 0,
+      Completed: 0,
+      Blocked: 0,
+    };
+    
+    tasks.forEach((task) => {
+      const status = task.progress as ProgressStatus;
+      if (status && stats[status] !== undefined) {
+        stats[status]++;
+      } else {
+        stats["Not Started"]++;
+      }
+    });
+    
+    setTaskStats(stats);
+  }, [tasks]);
+
+  // Format for chart display
+  const chartData = Object.entries(taskStats)
+    .filter(([key]) => key !== "total")
+    .map(([name, value]) => ({ name, value }));
+
+  const handleGeneratePdf = async () => {
+    if (!meetingId) return;
+    
+    setGeneratingPdf(true);
+    try {
+      const result = await minutesService.generateMinutesPdf(meetingId);
+      if (result.success) {
+        toast.success("PDF generated successfully");
+      }
+    } catch (error) {
+      console.error("Error generating PDF:", error);
+    } finally {
+      setGeneratingPdf(false);
+    }
+  };
+
+  const handleDownloadPdf = async () => {
+    if (!meetingId) return;
+    
+    setDownloadingPdf(true);
+    try {
+      const success = await minutesService.downloadMinutesPdf(meetingId);
+      if (success) {
+        toast.success("PDF downloaded successfully");
+      }
+    } catch (error) {
+      console.error("Error downloading PDF:", error);
+    } finally {
+      setDownloadingPdf(false);
+    }
+  };
+
   if (isLoading) {
     return (
-      <div className="flex justify-center p-12">
-        <Spinner size="lg" />
+      <div className="flex justify-center items-center h-64">
+        <Spinner className="h-8 w-8" />
+        <span className="ml-2">Loading meeting dashboard...</span>
       </div>
     );
   }
 
-  if (!dashboardData) {
-    return (
-      <Card>
-        <CardContent className="pt-6">
-          <div className="text-center py-8">
-            <AlertTriangle className="mx-auto h-12 w-12 text-muted-foreground" />
-            <h3 className="mt-2 text-lg font-medium">No dashboard data available</h3>
-            <p className="mt-1 text-muted-foreground">
-              There might not be enough data to generate a dashboard yet.
-            </p>
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  // Safe calculation of stats with null checks
-  const taskStats = {
-    total: dashboardData.taskStats?.total || 0,
-    notStarted: dashboardData.taskStats?.notStarted || 0,
-    inProgress: dashboardData.taskStats?.inProgress || 0,
-    completed: dashboardData.taskStats?.completed || 0,
-    blocked: dashboardData.taskStats?.blocked || 0,
-  };
-  
-  const completionRate = taskStats.total > 0 ? 
-    Math.round((taskStats.completed / taskStats.total) * 100) : 0;
-  
-  const tasksByStatus = [
-    { name: "Not Started", value: taskStats.notStarted },
-    { name: "In Progress", value: taskStats.inProgress },
-    { name: "Completed", value: taskStats.completed },
-    { name: "Blocked", value: taskStats.blocked },
-  ];
-  
-  const tasksByPriority = dashboardData.tasksByPriority || [];
-
   return (
     <div className="space-y-6">
-      {/* AI Summary */}
-      <Card>
-        <CardHeader>
-          <CardTitle>AI Meeting Summary</CardTitle>
-          <CardDescription>Generated summary of the meeting</CardDescription>
+      {/* AI Summary Card */}
+      <Card className="shadow-md">
+        <CardHeader className="bg-muted/50">
+          <CardTitle className="text-xl">AI Meeting Summary</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-2">
+        <CardContent className="pt-6">
           <div className="prose max-w-none">
-            {dashboardData.aiSummary ? (
-              <div dangerouslySetInnerHTML={{ __html: dashboardData.aiSummary.replace(/\n/g, '<br/>') }} />
-            ) : (
-              <p className="text-muted-foreground">No AI summary available yet.</p>
-            )}
+            <p>{aiSummary}</p>
           </div>
-          {isHost && (
-            <div className="pt-4">
-              <Button 
-                onClick={onGeneratePdf} 
-                disabled={isGeneratingPdf || !dashboardData.aiSummary}
-              >
-                {isGeneratingPdf && <Spinner className="mr-2 h-4 w-4" />}
-                <Download className="mr-2 h-4 w-4" />
-                Generate AI Minutes PDF
-              </Button>
-            </div>
-          )}
         </CardContent>
       </Card>
 
-      {/* Task Progress Overview */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Work Progress</CardTitle>
-          <CardDescription>Overview of tasks and completion status</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {taskStats.total > 0 ? (
-            <div className="space-y-6">
-              <div className="space-y-2">
-                <div className="flex justify-between items-center">
-                  <span className="text-sm font-medium">Completion Rate</span>
-                  <span className="text-sm font-medium">{completionRate}%</span>
-                </div>
-                <Progress value={completionRate} className="h-2" />
-              </div>
-              
-              <div className="grid gap-4 md:grid-cols-4">
-                <div className="bg-muted/50 p-3 rounded-md text-center">
-                  <p className="text-xs text-muted-foreground">Not Started</p>
-                  <p className="text-2xl font-bold">{taskStats.notStarted}</p>
-                </div>
-                <div className="bg-blue-50 p-3 rounded-md text-center">
-                  <p className="text-xs text-blue-700">In Progress</p>
-                  <p className="text-2xl font-bold text-blue-700">{taskStats.inProgress}</p>
-                </div>
-                <div className="bg-green-50 p-3 rounded-md text-center">
-                  <p className="text-xs text-green-700">Completed</p>
-                  <p className="text-2xl font-bold text-green-700">{taskStats.completed}</p>
-                </div>
-                <div className="bg-red-50 p-3 rounded-md text-center">
-                  <p className="text-xs text-red-700">Blocked</p>
-                  <p className="text-2xl font-bold text-red-700">{taskStats.blocked}</p>
-                </div>
-              </div>
-
-              <TaskProgressChart 
-                taskCompletion={{
-                  total: taskStats.total,
-                  completed: taskStats.completed,
-                  percentage: completionRate
-                }}
-                tasksByStatus={tasksByStatus}
-                tasksByPriority={tasksByPriority}
-              />
-            </div>
-          ) : (
-            <div className="text-center py-6">
-              <p className="text-muted-foreground">No tasks have been created yet.</p>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Assignees */}
-      {dashboardData.assignees && dashboardData.assignees.length > 0 && (
+      {/* Quick Stats Row */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Total Tasks Card */}
         <Card>
-          <CardHeader>
-            <CardTitle>Assignees</CardTitle>
-            <CardDescription>People assigned to tasks in this meeting</CardDescription>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Total Tasks
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
-              {dashboardData.assignees.map((assignee: any) => (
-                <div key={assignee.userId} className="flex items-center space-x-3">
-                  <Avatar>
-                    <AvatarImage src={`https://avatar.vercel.sh/${assignee.name}.png`} />
-                    <AvatarFallback>{assignee.name.charAt(0)}</AvatarFallback>
-                  </Avatar>
-                  <div>
-                    <p className="text-sm font-medium">{assignee.name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {assignee.taskCount || 0} task{assignee.taskCount !== 1 ? 's' : ''}
-                    </p>
-                  </div>
-                </div>
-              ))}
+            <div className="text-2xl font-bold">{taskStats.total}</div>
+          </CardContent>
+        </Card>
+
+        {/* Completed Tasks Card */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center">
+              <CheckCircle className="mr-2 h-4 w-4 text-green-500" />
+              Completed
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-green-600">
+              {taskStats.Completed}
+              <span className="text-sm font-normal text-muted-foreground ml-1">
+                ({taskStats.total > 0
+                  ? Math.round((taskStats.Completed / taskStats.total) * 100)
+                  : 0}%)
+              </span>
             </div>
           </CardContent>
         </Card>
-      )}
+
+        {/* In Progress Tasks Card */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center">
+              <Clock className="mr-2 h-4 w-4 text-blue-500" />
+              In Progress
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-blue-600">
+              {taskStats["In Progress"]}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Blocked Tasks Card */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center">
+              <AlertCircle className="mr-2 h-4 w-4 text-red-500" />
+              Blocked
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-red-600">
+              {taskStats.Blocked}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Task Progress Chart & Assignees */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Progress Chart */}
+        <Card className="shadow-md">
+          <CardHeader className="bg-muted/50">
+            <CardTitle className="text-xl">Task Progress</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-6 h-80">
+            <TaskProgressChart data={chartData} />
+          </CardContent>
+        </Card>
+
+        {/* Assignees */}
+        <Card className="shadow-md">
+          <CardHeader className="bg-muted/50">
+            <CardTitle className="flex items-center">
+              <Users className="mr-2 h-5 w-5" />
+              Task Assignees
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pt-6">
+            {assignees.length === 0 ? (
+              <p className="text-muted-foreground">No assignees yet</p>
+            ) : (
+              <ul className="space-y-2">
+                {assignees.map((user) => (
+                  <li key={user.id} className="flex items-center p-2 rounded-md bg-muted/30">
+                    <div className="h-8 w-8 rounded-full bg-primary/20 flex items-center justify-center text-primary font-medium">
+                      {user.name.charAt(0).toUpperCase()}
+                    </div>
+                    <div className="ml-2 flex-1">
+                      <p className="text-sm font-medium">{user.name}</p>
+                      <p className="text-xs text-muted-foreground">{user.email}</p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* PDF Actions */}
+      <div className="flex flex-col sm:flex-row gap-4">
+        {isHost && (
+          <Button 
+            variant="default" 
+            onClick={handleGeneratePdf} 
+            disabled={generatingPdf}
+          >
+            {generatingPdf ? (
+              <>
+                <Spinner className="mr-2 h-4 w-4" />
+                Generating PDF...
+              </>
+            ) : (
+              <>Generate AI Minutes PDF</>
+            )}
+          </Button>
+        )}
+        <Button 
+          variant="outline" 
+          onClick={handleDownloadPdf} 
+          disabled={downloadingPdf}
+          className="flex items-center"
+        >
+          {downloadingPdf ? (
+            <>
+              <Spinner className="mr-2 h-4 w-4" />
+              Downloading...
+            </>
+          ) : (
+            <>
+              <Download className="mr-2 h-4 w-4" />
+              Download Minutes PDF
+            </>
+          )}
+        </Button>
+      </div>
     </div>
   );
 }

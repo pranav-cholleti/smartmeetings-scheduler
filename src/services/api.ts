@@ -1,5 +1,5 @@
 
-import axios from 'axios';
+import axios, { AxiosInstance } from 'axios';
 import { toast } from "sonner";
 
 const API_BASE_URL = 'http://localhost:5000/api';
@@ -56,8 +56,8 @@ api.interceptors.response.use(
   }
 );
 
-// Download helper function
-api.download = async (url: string, filename?: string) => {
+// Extend the api instance with a download function
+const downloadFile = async (url: string, filename?: string) => {
   try {
     const response = await api.get(url, {
       responseType: 'blob',
@@ -83,4 +83,10 @@ api.download = async (url: string, filename?: string) => {
   }
 };
 
-export default api;
+// Add the download method to the api object
+const apiWithDownload = {
+  ...api,
+  download: downloadFile,
+};
+
+export default apiWithDownload;

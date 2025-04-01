@@ -130,6 +130,26 @@ export const taskService = {
     );
     return response.data.data;
   },
+  
+  // Save action items for a meeting
+  async saveActionItems(
+    meetingId: string,
+    actionItems: {
+      id?: string;
+      taskName: string;
+      assigneeIds: string[];
+      deadline: string;
+      priority: number;
+      progress?: ProgressStatus;
+      additionalComments?: string;
+    }[]
+  ): Promise<Task[]> {
+    const response = await api.put<{ success: boolean; data: Task[] }>(
+      `/meetings/${meetingId}/action-items`,
+      { actionItems }
+    );
+    return response.data.data;
+  }
 };
 
 export default taskService;

@@ -110,23 +110,23 @@ export function RichTextEditor({
         </CardFooter>
       )}
 
-      <style jsx>{`
-        :global(.ql-container) {
+      <style>{`
+        .ql-container {
           min-height: 200px;
           font-size: 16px;
           font-family: inherit;
         }
         
-        :global(.read-only .ql-editor) {
+        .read-only .ql-editor {
           padding: 1.5rem;
           border-radius: 0.5rem;
         }
         
-        :global(.read-only .ql-toolbar) {
+        .read-only .ql-toolbar {
           display: none;
         }
         
-        :global(.ql-editor) {
+        .ql-editor {
           min-height: 200px;
         }
       `}</style>
