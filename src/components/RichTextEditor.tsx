@@ -110,7 +110,8 @@ export function RichTextEditor({
         </CardFooter>
       )}
 
-      <style dangerouslySetInnerHTML={{ __html: `
+      <style>
+        {`
         .ql-container {
           min-height: 200px;
           font-size: 16px;
@@ -129,7 +130,8 @@ export function RichTextEditor({
         .ql-editor {
           min-height: 200px;
         }
-      `}} />
+        `}
+      </style>
     </Card>
   );
 }

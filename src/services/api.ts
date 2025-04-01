@@ -84,14 +84,12 @@ const downloadFile = async (url: string, filename?: string) => {
 };
 
 // Create a properly typed API instance with download function
-const apiWithDownload = {
-  ...api,
-  get: api.get.bind(api),
-  post: api.post.bind(api),
-  put: api.put.bind(api),
-  delete: api.delete.bind(api),
-  patch: api.patch.bind(api),
-  download: downloadFile,
-};
+interface ApiWithDownload extends AxiosInstance {
+  download: (url: string, filename?: string) => Promise<boolean>;
+}
+
+// Type assertion to add the download function to the API instance
+const apiWithDownload = api as ApiWithDownload;
+apiWithDownload.download = downloadFile;
 
 export default apiWithDownload;

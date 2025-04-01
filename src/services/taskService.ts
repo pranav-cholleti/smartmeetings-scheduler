@@ -14,10 +14,7 @@ export const taskService = {
     filter?: string
   ): Promise<TasksResponse> {
     const params = { page, limit, search, sortBy, sortOrder, filter };
-    const response = await api.get<{ success: boolean; data: TasksResponse }>(
-      "/tasks/assigned",
-      { params }
-    );
+    const response = await api.get("/tasks/assigned", { params });
     return response.data.data;
   },
   
@@ -31,10 +28,7 @@ export const taskService = {
     filter?: string
   ): Promise<TasksResponse> {
     const params = { page, limit, search, sortBy, sortOrder, filter };
-    const response = await api.get<{ success: boolean; data: TasksResponse }>(
-      "/tasks/scheduled",
-      { params }
-    );
+    const response = await api.get("/tasks/scheduled", { params });
     return response.data.data;
   },
   
@@ -47,10 +41,7 @@ export const taskService = {
     priority: number;
     additionalComments?: string;
   }): Promise<Task> {
-    const response = await api.post<{ success: boolean; data: Task }>(
-      "/tasks",
-      data
-    );
+    const response = await api.post("/tasks", data);
     return response.data.data;
   },
   
@@ -66,10 +57,7 @@ export const taskService = {
       additionalComments?: string;
     }
   ): Promise<Task> {
-    const response = await api.put<{ success: boolean; data: Task }>(
-      `/tasks/${taskId}`,
-      data
-    );
+    const response = await api.put(`/tasks/${taskId}`, data);
     return response.data.data;
   },
   
@@ -83,9 +71,7 @@ export const taskService = {
   
   // Delete a task
   async deleteTask(taskId: string): Promise<{ taskId: string }> {
-    const response = await api.delete<{ success: boolean; data: { taskId: string } }>(
-      `/tasks/${taskId}`
-    );
+    const response = await api.delete(`/tasks/${taskId}`);
     return response.data.data;
   },
 
@@ -95,22 +81,13 @@ export const taskService = {
     tasksByPriority: { name: string; value: number }[];
     completionRate: number;
   }> {
-    const response = await api.get<{ 
-      success: boolean; 
-      data: {
-        tasksByStatus: { name: string; value: number }[];
-        tasksByPriority: { name: string; value: number }[];
-        completionRate: number;
-      } 
-    }>("/tasks/statistics");
+    const response = await api.get("/tasks/statistics");
     return response.data.data;
   },
   
   // Get tasks by meeting id
   async getTasksByMeetingId(meetingId: string): Promise<Task[]> {
-    const response = await api.get<{ success: boolean; data: Task[] }>(
-      `/tasks/meeting/${meetingId}`
-    );
+    const response = await api.get(`/tasks/meeting/${meetingId}`);
     return response.data.data;
   },
   
@@ -124,10 +101,7 @@ export const taskService = {
     progress?: ProgressStatus;
     additionalComments?: string;
   }[]): Promise<Task[]> {
-    const response = await api.put<{ success: boolean; data: Task[] }>(
-      `/tasks/batch`,
-      { tasks }
-    );
+    const response = await api.put(`/tasks/batch`, { tasks });
     return response.data.data;
   },
   
@@ -144,10 +118,7 @@ export const taskService = {
       additionalComments?: string;
     }[]
   ): Promise<Task[]> {
-    const response = await api.put<{ success: boolean; data: Task[] }>(
-      `/meetings/${meetingId}/action-items`,
-      { actionItems }
-    );
+    const response = await api.put(`/meetings/${meetingId}/action-items`, { actionItems });
     return response.data.data;
   }
 };

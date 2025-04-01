@@ -12,14 +12,14 @@ export const minutesService = {
     const formData = new FormData();
     formData.append("file", file);
     
-    const response = await api.post<{
-      success: boolean;
-      data: { minutesText: string };
-    }>(`/meetings/${meetingId}/minutes/upload`, formData, {
-      headers: {
-        "Content-Type": "multipart/form-data",
-      },
-    });
+    const response = await api.post(`/meetings/${meetingId}/minutes/upload`, 
+      formData,
+      {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+      }
+    );
     
     return {
       success: response.data.success,
@@ -34,8 +34,7 @@ export const minutesService = {
     meetingId: string,
     minutesText: string
   ): Promise<{ success: boolean }> {
-    const response = await api.put<{ success: boolean }>(
-      `/meetings/${meetingId}/minutes`,
+    const response = await api.put(`/meetings/${meetingId}/minutes`,
       {
         minutesText,
       }
@@ -60,19 +59,7 @@ export const minutesService = {
       additionalComments?: string;
     }>;
   }> {
-    const response = await api.post<{
-      success: boolean;
-      data: {
-        actionItems: Array<{
-          taskName: string;
-          assigneeIds: string[];
-          deadline: string;
-          priority: number;
-          progress: string;
-          additionalComments?: string;
-        }>;
-      };
-    }>(`/meetings/${meetingId}/extract-action-items`);
+    const response = await api.post(`/meetings/${meetingId}/extract-action-items`);
     
     return {
       success: response.data.success,
@@ -86,10 +73,7 @@ export const minutesService = {
   async generateMinutesPdf(
     meetingId: string
   ): Promise<{ success: boolean; pdfUrl?: string }> {
-    const response = await api.post<{
-      success: boolean;
-      data: { pdfUrl?: string };
-    }>(`/meetings/${meetingId}/minutes/generate-pdf`);
+    const response = await api.post(`/meetings/${meetingId}/minutes/generate-pdf`);
     
     return {
       success: response.data.success,

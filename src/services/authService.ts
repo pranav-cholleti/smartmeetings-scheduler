@@ -7,12 +7,12 @@ const USER_KEY = 'user';
 
 export const authService = {
   async register(data: RegisterData): Promise<User> {
-    const response = await api.post<{success: boolean; data: User}>('/auth/register', data);
+    const response = await api.post('/auth/register', data);
     return response.data.data;
   },
 
   async login(data: LoginData): Promise<void> {
-    const response = await api.post<{success: boolean; data: AuthResponse}>('/auth/login', data);
+    const response = await api.post('/auth/login', data);
     const { token, user } = response.data.data;
     
     // Store auth information
@@ -22,7 +22,7 @@ export const authService = {
 
   async getCurrentUser(): Promise<User | null> {
     try {
-      const response = await api.get<{success: boolean; data: User}>('/users/me');
+      const response = await api.get('/users/me');
       const user = response.data.data;
       localStorage.setItem(USER_KEY, JSON.stringify(user));
       return user;

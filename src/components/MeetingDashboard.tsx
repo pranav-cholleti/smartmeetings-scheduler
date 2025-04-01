@@ -24,10 +24,10 @@ export function MeetingDashboard() {
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
 
-  // Fetch meeting details
+  // Fetch meeting details - changed getMeetingById to getMeetingDetails
   const { data: meeting, isLoading, error, refetch } = useQuery({
     queryKey: ['meeting', meetingId],
-    queryFn: () => meetingService.getMeetingById(meetingId || ''),
+    queryFn: () => meetingService.getMeetingDetails(meetingId || ''),
     enabled: !!meetingId,
   });
 
